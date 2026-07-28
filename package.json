@@ -13,7 +13,7 @@
     "test:unit": "node --experimental-strip-types --test tests/domain.test.ts",
     "test:render": "node --test tests/rendered-html.test.mjs",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .worktrees/**/dist"
   },
   "dependencies": {
     "next": "16.2.12",

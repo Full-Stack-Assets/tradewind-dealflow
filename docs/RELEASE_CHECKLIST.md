@@ -1,5 +1,25 @@
 # Production Release Checklist
 
+## Last verification run
+
+- Date: 2026-07-28
+- Commit target: `c5643831e3b4e2de566d7724f662e088f7c9574c` (current working head)
+- Test gates run in this pass:
+  - `npm run test` → pass (`tests 13`, `pass 13`)
+  - `npm run typecheck` → pass
+  - `npm run lint` → pass after excluding `.worktrees/**/dist` from lint scope
+  - `npm run build` → pass
+  - `npm run test:render` → pass (`tests 13`, `pass 13`)
+  - `npm audit` → fails only due dev-chain advisory (`brace-expansion` via `minimatch` in eslint toolchain)
+  - `npm audit --omit=dev` → pass
+
+- Runtime route checks on local production build (`node dist/standalone/server.js`):
+  - `GET /` → 200 and rendered.
+  - `GET /dashboard` → 200 and rendered.
+  - `GET /pipeline` → 200 and rendered.
+  - `GET /healthz` → 200 JSON `{ "status":"ok","service":"tradewind-dealflow","release":"local-first","outreach":"disabled" }`
+- Header checks on `/` and workspace routes include security headers (`content-security-policy`, `x-frame-options`, `x-content-type-options`, `referrer-policy`) and no cache on `/healthz`.
+
 ## Product integrity
 
 - [ ] Public site contains no fabricated property, buyer, testimonial, revenue,
@@ -13,16 +33,16 @@
 
 ## Functional verification
 
-- [ ] `npm test` passes from the release source.
-- [ ] `npm run typecheck` passes.
-- [ ] `npm run lint` passes.
-- [ ] JSON import rejects incompatible and malformed nested records.
+- [x] `npm test` passes from the release source.
+- [x] `npm run typecheck` passes.
+- [x] `npm run lint` passes.
+- [x] JSON import rejects incompatible and malformed nested records.
 - [ ] Valid import requires replacement confirmation.
 - [ ] Record delete and full clear require confirmation.
-- [ ] MAO and heuristic labels are correct.
-- [ ] Buyer matching displays reasons and conflicts.
-- [ ] Rhode Island seller and assignee windows remain separate.
-- [ ] Unknown holiday calendar keeps Rhode Island readiness blocked.
+- [x] MAO and heuristic labels are correct.
+- [x] Buyer matching displays reasons and conflicts.
+- [x] Rhode Island seller and assignee windows remain separate.
+- [x] Unknown holiday calendar keeps Rhode Island readiness blocked.
 
 ## Accessibility and responsive review
 
@@ -43,7 +63,7 @@
 - [ ] No analytics or telemetry receives addresses, contacts, buyer data, or
       free-form notes.
 - [ ] Browser-storage/data-loss notice is prominent.
-- [ ] Security headers are present in the production response.
+- [x] Security headers are present in the production response.
 
 ## Deployment
 
@@ -54,4 +74,3 @@
 - [ ] `/`, every primary workspace, and `/healthz` load on production.
 - [ ] Production version, commit, URL, time, and rollback version are recorded.
 - [ ] No DNS change is made without explicit authorization.
-
