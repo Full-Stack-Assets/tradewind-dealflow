@@ -92,21 +92,23 @@ export function mapLaunchBuyBoxValidationErrors(
   const mapped: Partial<Record<LaunchBuyBoxFieldKey, string>> = {};
   for (const error of result.errors) {
     const normalized = error.toLowerCase();
-    const key: LaunchBuyBoxFieldKey = /state/.test(normalized)
-      ? "states"
-      : /market/.test(normalized)
-        ? "markets"
-        : /property type/.test(normalized)
-          ? "propertyTypes"
-          : /price/.test(normalized)
-            ? "prices"
-            : /rehab/.test(normalized)
-              ? "rehab"
-              : /confidence/.test(normalized)
-                ? "confidence"
-                : /fresh|verification age/.test(normalized)
-                  ? "freshness"
-                  : "financial";
+    const key: LaunchBuyBoxFieldKey = /^property type(?:\s|$)/u.test(normalized)
+      ? "propertyTypes"
+      : /state/.test(normalized)
+        ? "states"
+        : /market/.test(normalized)
+          ? "markets"
+          : /property type/.test(normalized)
+            ? "propertyTypes"
+            : /price/.test(normalized)
+              ? "prices"
+              : /rehab/.test(normalized)
+                ? "rehab"
+                : /confidence/.test(normalized)
+                  ? "confidence"
+                  : /fresh|verification age/.test(normalized)
+                    ? "freshness"
+                    : "financial";
     mapped[key] = mapped[key] ? `${mapped[key]} ${error}` : error;
   }
   return mapped;

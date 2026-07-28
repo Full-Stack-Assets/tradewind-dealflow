@@ -328,7 +328,7 @@ test("launch buy-box validation rejects geography or property-type expansion", (
   }
 });
 
-test("launch property-type errors map only to the property-type form field", () => {
+test("generated launch property-type errors cannot be diverted by adversarial names", () => {
   const mapErrors = (
     launchQualification as unknown as {
       mapLaunchBuyBoxValidationErrors?: (
@@ -340,21 +340,25 @@ test("launch property-type errors map only to the property-type form field", () 
   if (!mapErrors) return;
 
   const previous = createDefaultBuyBox("2026-07-27T12:00:00.000Z");
-  const result = launchQualification.normalizeLaunchBuyBox(
-    {
-      ...previous,
-      propertyTypes: ["Mixed-use"],
-    },
-    previous,
-    evaluationDate,
-  );
-  assert.equal(result.ok, false);
-  if (result.ok) return;
+  for (const rawType of ["Estate", "Market-rate residential"]) {
+    const result = launchQualification.normalizeLaunchBuyBox(
+      {
+        ...previous,
+        propertyTypes: [rawType],
+      },
+      previous,
+      evaluationDate,
+    );
+    assert.equal(result.ok, false);
+    if (result.ok) continue;
 
-  const mapped = mapErrors(result);
-  assert.deepEqual(Object.keys(mapped), ["propertyTypes"]);
-  assert.match(mapped.propertyTypes ?? "", /property type/i);
-  assert.equal(mapped.financial, undefined);
+    const expectedError =
+      `Property type "${rawType}" is outside the frozen residential 1–4 family launch scope.`;
+    assert.deepEqual(result.errors, [expectedError]);
+    assert.deepEqual(mapErrors(result), {
+      propertyTypes: expectedError,
+    });
+  }
 });
 
 test("semantic saves normalize, dedupe, and increment only material changes", () => {
