@@ -17,6 +17,7 @@ import {
   LOCAL_DATA_KEY,
   mutateStoredWorkspace,
   readStoredWorkspace,
+  replaceStoredWorkspace,
   type MutationResult,
   type StorageReadResult,
   type WorkspaceLockManager,
@@ -179,8 +180,15 @@ export function LocalDataProvider({ children }: { children: ReactNode }) {
   );
 
   const replaceData = useCallback(
-    async (next: DealFlowData) => updateData(() => next),
-    [updateData],
+    async (next: DealFlowData) => {
+      const result = await replaceStoredWorkspace(
+        window.localStorage,
+        getBrowserLocks(),
+        next,
+      );
+      return finishMutation(result);
+    },
+    [finishMutation],
   );
 
   const clearData = useCallback(async () => {

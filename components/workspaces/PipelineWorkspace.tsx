@@ -16,6 +16,7 @@ import {
   serializeData,
   serializePipelineCsv,
 } from "@/lib/import-export";
+import { shouldOfferWorkspaceClear } from "@/lib/local-storage";
 import {
   PIPELINE_STAGES,
   type DealFlowData,
@@ -62,6 +63,7 @@ export function PipelineWorkspace() {
     updateData,
     replaceData,
     clearData,
+    storageStatus,
     writesSupported,
   } = useLocalData();
   const [form, setForm] = useState<LeadForm>(blankLead);
@@ -84,6 +86,10 @@ export function PipelineWorkspace() {
     Object.values(data.compliance.marketingChecks).some(Boolean) ||
     data.dealDeskDraft.dealId !== "" ||
     data.dealDeskDraft.summary !== "";
+  const offerWorkspaceClear = shouldOfferWorkspaceClear(
+    hasLocalData,
+    storageStatus,
+  );
 
   const addLead = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -489,7 +495,7 @@ export function PipelineWorkspace() {
         </section>
       )}
 
-      {hasLocalData && (
+      {offerWorkspaceClear && (
         <div className="danger-zone">
           <div>
             <strong>Reset local workspace</strong>

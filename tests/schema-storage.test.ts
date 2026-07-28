@@ -13,6 +13,8 @@ import {
   MAX_WORKSPACE_BYTES,
   mutateStoredWorkspace,
   readStoredWorkspace,
+  replaceStoredWorkspace,
+  shouldOfferWorkspaceClear,
   writeStoredWorkspace,
   type WorkspaceLockManager,
 } from "../lib/local-storage.ts";
@@ -336,16 +338,101 @@ test("locked mutation blocks corrupt storage before calling the updater", async 
   assert.equal(storage.setItemCalls, 0);
 });
 
-test("mutation does not use an unlocked fallback", async () => {
+test("locked replacement restores a validated backup over corrupt storage", async () => {
+  const storage = memoryStorage({ [LOCAL_DATA_KEY]: "{broken" });
+  const replacement = createEmptyData("2026-07-28T10:00:00.000Z");
+  replacement.revision = 4;
+  replacement.preferences.selectedState = "RI";
+  const requestedNames: string[] = [];
+
+  const result = await replaceStoredWorkspace(
+    storage,
+    immediateLocks((name) => requestedNames.push(name)),
+    replacement,
+    new Date("2026-07-28T12:00:00Z"),
+  );
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(requestedNames, ["tradewind-dealflow:workspace-write"]);
+  assert.equal(storage.setItemCalls, 1);
+  const saved = JSON.parse(storage.getItem(LOCAL_DATA_KEY) ?? "{}");
+  assert.equal(saved.revision, 5);
+  assert.equal(saved.updatedAt, "2026-07-28T12:00:00.000Z");
+  assert.equal(saved.preferences.selectedState, "RI");
+});
+
+test("locked replacement increments the latest valid local revision", async () => {
+  const current = createEmptyData("2026-07-28T09:00:00.000Z");
+  current.revision = 7;
+  const storage = memoryStorage({
+    [LOCAL_DATA_KEY]: JSON.stringify(current),
+  });
+  const replacement = createEmptyData("2026-07-28T10:00:00.000Z");
+  replacement.revision = 2;
+
+  const result = await replaceStoredWorkspace(
+    storage,
+    immediateLocks(),
+    replacement,
+    new Date("2026-07-28T12:00:00Z"),
+  );
+
+  assert.equal(result.ok, true);
+  const saved = JSON.parse(storage.getItem(LOCAL_DATA_KEY) ?? "{}");
+  assert.equal(saved.revision, 8);
+});
+
+test("locked replacement rejects an invalid backup before writing", async () => {
+  const storage = memoryStorage({ [LOCAL_DATA_KEY]: "{broken" });
+  const result = await replaceStoredWorkspace(
+    storage,
+    immediateLocks(),
+    { schemaVersion: 2 } as never,
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(storage.setItemCalls, 0);
+});
+
+test("locked replacement rejects an oversized backup before writing", async () => {
+  const storage = memoryStorage({ [LOCAL_DATA_KEY]: "{broken" });
+  const oversized = createEmptyData();
+  oversized.dealDeskDraft.summary = "x".repeat(MAX_WORKSPACE_BYTES);
+  const result = await replaceStoredWorkspace(
+    storage,
+    immediateLocks(),
+    oversized,
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(storage.setItemCalls, 0);
+});
+
+test("corrupt storage offers the clear-control UI gate despite empty fallback data", () => {
+  const readResult = readStoredWorkspace(
+    memoryStorage({ [LOCAL_DATA_KEY]: "{broken" }),
+  );
+
+  assert.equal(readResult.status, "corrupt");
+  assert.equal(shouldOfferWorkspaceClear(false, readResult.status), true);
+});
+
+test("storage mutations do not use an unlocked fallback", async () => {
   const storage = memoryStorage();
 
-  const result = await mutateStoredWorkspace(
+  const mutationResult = await mutateStoredWorkspace(
     storage,
     null,
     (latest) => latest,
   );
+  const replacementResult = await replaceStoredWorkspace(
+    storage,
+    null,
+    createEmptyData(),
+  );
 
-  assert.equal(result.ok, false);
+  assert.equal(mutationResult.ok, false);
+  assert.equal(replacementResult.ok, false);
   assert.equal(storage.setItemCalls, 0);
 });
 

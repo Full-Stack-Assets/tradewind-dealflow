@@ -255,6 +255,68 @@ export async function mutateStoredWorkspace(
   }
 }
 
+export async function replaceStoredWorkspace(
+  storage: StorageLike,
+  locks: WorkspaceLockManager | null,
+  next: DealFlowData,
+  now: Date | (() => Date) = () => new Date(),
+): Promise<MutationResult> {
+  if (locks === null) {
+    return {
+      ok: false,
+      code: "unsupported-lock",
+      message: UNSUPPORTED_LOCK_MESSAGE,
+    };
+  }
+
+  try {
+    return await locks.request(WORKSPACE_WRITE_LOCK, () => {
+      const replacementTime = typeof now === "function" ? now() : now;
+      const validation = validateImport(next, replacementTime);
+      if (!validation.ok || next.schemaVersion !== 2) {
+        return {
+          ok: false,
+          code: "invalid",
+          message: INVALID_MUTATION_MESSAGE,
+        };
+      }
+      const latest = readStoredWorkspace(storage, replacementTime);
+      const nextRevision =
+        latest.status === "corrupt"
+          ? validation.data.revision + 1
+          : latest.data.revision + 1;
+
+      const stamped: DealFlowData = {
+        ...validation.data,
+        revision: nextRevision,
+        updatedAt: replacementTime.toISOString(),
+      };
+      const written = writeStoredWorkspace(storage, stamped);
+      if (!written.ok) {
+        return {
+          ok: false,
+          code: written.code,
+          message: written.message,
+        };
+      }
+      return { ok: true };
+    });
+  } catch {
+    return {
+      ok: false,
+      code: "unavailable",
+      message: STORAGE_ACCESS_MESSAGE,
+    };
+  }
+}
+
+export function shouldOfferWorkspaceClear(
+  hasLocalData: boolean,
+  storageStatus: string,
+): boolean {
+  return hasLocalData || storageStatus === "corrupt";
+}
+
 export async function clearStoredWorkspace(
   storage: StorageLike,
   locks: WorkspaceLockManager | null,
