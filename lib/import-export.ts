@@ -23,8 +23,7 @@ import type {
 } from "./types.ts";
 import { PIPELINE_STAGES } from "./types.ts";
 
-export const LOCAL_DATA_KEY = "tradewind-dealflow:v2";
-export const LEGACY_LOCAL_DATA_KEY = "tradewind-dealflow:v1";
+export const LOCAL_DATA_KEY = "tradewind-dealflow:v1";
 
 const MAX_ARRAY_LENGTH = 500;
 const MAX_STRING_LENGTH = 10_000;
@@ -51,7 +50,7 @@ type DealRecordV1 = Omit<DealRecord, "market" | "sourceAssertions" | "factConfli
   rehabLevel: RehabLevel;
 };
 
-export type DealFlowDataV1 = Omit<DealFlowData, "schemaVersion" | "revision" | "buyBox" | "deals"> & {
+type DealFlowDataV1 = Omit<DealFlowData, "schemaVersion" | "revision" | "buyBox" | "deals"> & {
   schemaVersion: 1;
   deals: DealRecordV1[];
 };
@@ -314,7 +313,11 @@ function migrationRestriction(status: string, dealId: string, createdAt: string)
 
 export function migrateV1(value: DealFlowDataV1, now: Date): DealFlowData {
   const migratedDeals: DealRecord[] = value.deals.map((deal) => {
-    const restriction = migrationRestriction(deal.ownerContactStatus, deal.id, now.toISOString());
+    const restriction = migrationRestriction(
+      deal.ownerContactStatus,
+      deal.id,
+      deal.updatedAt,
+    );
     return {
       id: deal.id, createdAt: deal.createdAt, updatedAt: deal.updatedAt, state: deal.state,
       address: deal.address, city: deal.city, market: "", propertyType: deal.propertyType,

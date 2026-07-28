@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   createEmptyData,
+  LOCAL_DATA_KEY,
   serializePipelineCsv,
   validateImport,
 } from "../lib/import-export.ts";
@@ -88,6 +89,14 @@ test("v1 migration preserves DNC and never invents provenance", () => {
     result.data.deals[0]?.researchRestrictions[0]?.code,
     "Do not contact",
   );
+  assert.equal(
+    result.data.deals[0]?.researchRestrictions[0]?.createdAt,
+    "2026-07-27T12:00:00.000Z",
+  );
+});
+
+test("the shipped local key remains readable until the storage migration ships", () => {
+  assert.equal(LOCAL_DATA_KEY, "tradewind-dealflow:v1");
 });
 
 test("v2 validation strips no unknown data and rejects it instead", () => {
