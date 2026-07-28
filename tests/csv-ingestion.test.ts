@@ -75,6 +75,22 @@ test("CSV decoding rejects invalid UTF-8 and files over one MiB", () => {
   );
 });
 
+test("CSV accepts at most one leading UTF-8 BOM from bytes or direct text", () => {
+  const encoder = new TextEncoder();
+  assert.equal(decodeCsvFile(encoder.encode("source")), "source");
+  assert.equal(decodeCsvFile(encoder.encode("\uFEFFsource")), "source");
+  assert.equal(parseCsv("source").ok, true);
+  assert.equal(parseCsv("\uFEFFsource").ok, true);
+  assert.throws(
+    () => decodeCsvFile(encoder.encode("\uFEFF\uFEFFsource")),
+    /BOM/i,
+  );
+
+  const direct = parseCsv("\uFEFF\uFEFFsource");
+  assert.equal(direct.ok, false);
+  if (!direct.ok) assert.match(direct.errors[0] ?? "", /BOM/i);
+});
+
 test("CSV parser enforces data row, column, field, and aggregate character limits", () => {
   const tooManyRows = Array.from({ length: MAX_CSV_DATA_ROWS + 2 }, (_, index) => String(index)).join("\n");
   const rows = parseCsv(tooManyRows);
@@ -169,6 +185,16 @@ test("lead validation rejects invalid enum values and negative asking prices", (
   const price = validateLeadCsv(validTable(["asking_price"], ["-1"]), fixedNow);
   assert.equal(price.ok, false);
   assert.match(price.errors[0] ?? "", /asking_price.*non-negative/i);
+});
+
+test("lead validation retains exact dollar-and-cents prices and rejects precision loss", () => {
+  const valid = validateLeadCsv(validTable(["asking_price"], ["425000.50"]), fixedNow);
+  assert.equal(valid.ok, true);
+  assert.equal(valid.candidates[0]?.askingPrice, 425000.5);
+
+  const unsafe = validateLeadCsv(validTable(["asking_price"], ["9007199254740993"]), fixedNow);
+  assert.equal(unsafe.ok, false);
+  assert.match(unsafe.errors[0] ?? "", /asking_price.*precision|asking_price.*safe/i);
 });
 
 test("lead validation accepts optional property facts when present", () => {

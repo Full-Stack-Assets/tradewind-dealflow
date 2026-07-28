@@ -12,6 +12,9 @@ export function decodeCsvFile(bytes: Uint8Array): string {
   if (bytes.byteLength > MAX_CSV_BYTES) {
     throw new Error("CSV files must be no larger than one MiB.");
   }
+  if (hasMultipleLeadingUtf8Boms(bytes)) {
+    throw new Error("CSV contains more than one leading UTF-8 BOM.");
+  }
 
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -21,8 +24,11 @@ export function decodeCsvFile(bytes: Uint8Array): string {
 }
 
 export function parseCsv(input: string): CsvParseResult {
-  const text = input.startsWith("\uFEFF") ? input.slice(1) : input;
-  if (Array.from(text).length > MAX_CSV_TOTAL_CHARACTERS) {
+  const bomCount = leadingBomCount(input);
+  if (bomCount > 1) return failure("CSV contains more than one leading UTF-8 BOM.");
+  const text = bomCount === 1 ? input.slice(1) : input;
+  const characters = Array.from(text);
+  if (characters.length > MAX_CSV_TOTAL_CHARACTERS) {
     return failure("CSV exceeds the maximum aggregate decoded character limit.");
   }
   if (text === "") return { ok: true, rows: [] };
@@ -30,12 +36,14 @@ export function parseCsv(input: string): CsvParseResult {
   const rows: string[][] = [];
   let row: string[] = [];
   let field = "";
+  let fieldCharacterCount = 0;
   let inQuotes = false;
   let afterQuote = false;
 
   const append = (value: string): CsvParseResult | null => {
     field += value;
-    if (Array.from(field).length > MAX_CSV_FIELD_LENGTH) {
+    fieldCharacterCount += 1;
+    if (fieldCharacterCount > MAX_CSV_FIELD_LENGTH) {
       return failure("CSV field exceeds the maximum decoded field length.");
     }
     return null;
@@ -52,15 +60,16 @@ export function parseCsv(input: string): CsvParseResult {
     rows.push(row);
     row = [];
     field = "";
+    fieldCharacterCount = 0;
     afterQuote = false;
     return null;
   };
 
-  for (let index = 0; index < text.length; index += 1) {
-    const character = text[index] as string;
+  for (let index = 0; index < characters.length; index += 1) {
+    const character = characters[index] as string;
     if (inQuotes) {
       if (character === '"') {
-        if (text[index + 1] === '"') {
+        if (characters[index + 1] === '"') {
           const error = append('"');
           if (error) return error;
           index += 1;
@@ -71,7 +80,7 @@ export function parseCsv(input: string): CsvParseResult {
       } else if (character === "\r") {
         const error = append("\n");
         if (error) return error;
-        if (text[index + 1] === "\n") index += 1;
+        if (characters[index + 1] === "\n") index += 1;
       } else {
         const error = append(character);
         if (error) return error;
@@ -86,11 +95,12 @@ export function parseCsv(input: string): CsvParseResult {
           return failure("CSV exceeds the maximum number of columns.");
         }
         field = "";
+        fieldCharacterCount = 0;
         afterQuote = false;
       } else if (character === "\n" || character === "\r") {
         const error = finishRow();
         if (error) return error;
-        if (character === "\r" && text[index + 1] === "\n") index += 1;
+        if (character === "\r" && characters[index + 1] === "\n") index += 1;
       } else {
         return failure("CSV contains characters after a closing quote.");
       }
@@ -106,10 +116,11 @@ export function parseCsv(input: string): CsvParseResult {
         return failure("CSV exceeds the maximum number of columns.");
       }
       field = "";
+      fieldCharacterCount = 0;
     } else if (character === "\n" || character === "\r") {
       const error = finishRow();
       if (error) return error;
-      if (character === "\r" && text[index + 1] === "\n") index += 1;
+      if (character === "\r" && characters[index + 1] === "\n") index += 1;
     } else {
       const error = append(character);
       if (error) return error;
@@ -126,4 +137,15 @@ export function parseCsv(input: string): CsvParseResult {
 
 function failure(error: string): CsvParseResult {
   return { ok: false, errors: [error] };
+}
+
+function hasMultipleLeadingUtf8Boms(bytes: Uint8Array): boolean {
+  return bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf &&
+    bytes[3] === 0xef && bytes[4] === 0xbb && bytes[5] === 0xbf;
+}
+
+function leadingBomCount(value: string): number {
+  let count = 0;
+  while (value[count] === "\uFEFF") count += 1;
+  return count;
 }

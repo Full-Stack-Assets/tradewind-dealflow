@@ -155,9 +155,9 @@ function validateRow(values: Record<string, string>, rowNumber: number, now: Dat
   const askingPrice = optionalText(values.asking_price);
   let parsedPrice: number | null = null;
   if (askingPrice !== null) {
-    if (!/^(?:0|[1-9]\d*)(?:\.\d+)?$/.test(askingPrice)) return rowError(rowNumber, "asking_price", "must be a non-negative number");
-    parsedPrice = Number(askingPrice);
-    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) return rowError(rowNumber, "asking_price", "must be a non-negative number");
+    const parsed = parseAskingPrice(askingPrice);
+    if (typeof parsed === "string") return rowError(rowNumber, "asking_price", parsed);
+    parsedPrice = parsed;
   }
 
   const rehabLevel = optionalText(values.rehab_level);
@@ -205,6 +205,22 @@ function normalizeText(value: string | undefined): string {
 function optionalText(value: string | undefined): string | null {
   const normalized = normalizeText(value);
   return normalized === "" ? null : normalized;
+}
+
+function parseAskingPrice(value: string): number | string {
+  const match = /^(?:0|[1-9]\d*)(?:\.(\d{1,2}))?$/.exec(value);
+  if (!match) return "must be a non-negative dollar or cents value";
+  const cents = match[1] ?? "";
+  const [dollars] = value.split(".");
+  const minorUnits = BigInt(dollars as string) * BigInt(100) + BigInt((cents + "00").slice(0, 2));
+  if (minorUnits > BigInt(Number.MAX_SAFE_INTEGER)) {
+    return "must be safely representable without precision loss";
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed.toFixed(cents.length) !== value) {
+    return "must be safely representable without precision loss";
+  }
+  return parsed;
 }
 
 function parseImportDate(value: string, now: Date): { ok: true; value: string } | { ok: false; error: string } {
