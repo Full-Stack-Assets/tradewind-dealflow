@@ -393,6 +393,13 @@ export function applyLeadImportPlan(
   ) {
     return { ok: false, error: STALE_PLAN_ERROR };
   }
+  if (!hasValidPlannedRowMap(plan)) {
+    return {
+      ok: false,
+      error:
+        "Planned row numbers must be unique and planned references must be valid.",
+    };
+  }
   if (planSplitsSourceIdentity(data, plan)) {
     return {
       ok: false,
@@ -582,7 +589,16 @@ function addFactConflicts(
     const duplicate = deal.factConflicts.some(
       (conflict) =>
         conflict.field === field &&
-        conflict.sourceAssertionId === assertion.id,
+        (
+          conflict.sourceAssertionId === assertion.id ||
+          (
+            conflict.status === "Unresolved" &&
+            canonicalJson(conflict.canonicalValue) ===
+              canonicalJson(canonicalValue) &&
+            canonicalJson(conflict.assertedValue) ===
+              canonicalJson(assertedValue)
+          )
+        ),
     );
     if (duplicate) continue;
     const identity = canonicalJson({
@@ -801,6 +817,28 @@ function assertAttachmentIdentityIsUnambiguous(
       "This source identity resolves to multiple target properties in the import plan.",
     );
   }
+}
+
+function hasValidPlannedRowMap(plan: LeadImportPlan): boolean {
+  const plannedRows = new Set<number>();
+  for (const item of plan.newRows) {
+    if (
+      !Number.isInteger(item.rowNumber) ||
+      item.rowNumber < 2 ||
+      plannedRows.has(item.rowNumber)
+    ) {
+      return false;
+    }
+    plannedRows.add(item.rowNumber);
+  }
+  return plan.changedSourceRows.every((item) => {
+    const plannedTarget = item.plannedDealRowNumber;
+    const hasExistingTarget = item.dealId !== null;
+    const hasPlannedTarget = plannedTarget !== null;
+    if (hasExistingTarget === hasPlannedTarget) return false;
+    if (plannedTarget === null) return true;
+    return plannedRows.has(plannedTarget);
+  });
 }
 
 function planSplitsSourceIdentity(

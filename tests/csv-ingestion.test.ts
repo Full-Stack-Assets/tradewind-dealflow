@@ -520,6 +520,24 @@ test("apply rejects a crafted plan that splits one source identity across deals"
   assert.equal(data.deals[1]?.sourceAssertions.length, 1);
 });
 
+test("apply rejects duplicate planned row numbers before creating deals", () => {
+  const data = emptyWorkspace();
+  const crafted = planLeadImport(data, [
+    candidate({ sourceRecordId: "new-source" }),
+  ]);
+  const duplicateRow = structuredClone(crafted.newRows[0]);
+  assert.ok(duplicateRow);
+  duplicateRow.candidate.address = "20 Harbor Way";
+  crafted.newRows.push(duplicateRow);
+
+  const applied = applyLeadImportPlan(data, crafted, fixedNow);
+  assert.equal(applied.ok, false);
+  if (!applied.ok) {
+    assert.match(applied.error, /planned row numbers.*unique/i);
+  }
+  assert.equal(data.deals.length, 0);
+});
+
 test("source identity normalization collapses internal whitespace", () => {
   const first = importCandidates(emptyWorkspace(), [candidate()]);
   const plan = planLeadImport(first, [
@@ -594,7 +612,7 @@ test("restricted assertions create related holds and new deals enter only Resear
   assert.equal(deal.researchRestrictions[0]?.source, "Source assertion");
 });
 
-test("fresh repeated disagreements retain source-linked fact conflicts", () => {
+test("equivalent unresolved disagreements do not duplicate conflicts", () => {
   const first = importCandidates(emptyWorkspace(), [candidate()]);
   const changed = importCandidates(first, [
     candidate({
@@ -610,12 +628,8 @@ test("fresh repeated disagreements retain source-linked fact conflicts", () => {
   ]);
 
   assert.equal(refreshed.deals[0]?.sourceAssertions.length, 3);
-  assert.equal(refreshed.deals[0]?.factConflicts.length, 2);
+  assert.equal(refreshed.deals[0]?.factConflicts.length, 1);
   assert.equal(refreshed.deals[0]?.factConflicts[0]?.field, "address");
-  assert.equal(
-    refreshed.deals[0]?.factConflicts[1]?.sourceAssertionId,
-    refreshed.deals[0]?.sourceAssertions[2]?.id,
-  );
 });
 
 test("fresh disagreeing assertions get new unresolved evidence after resolution", () => {
