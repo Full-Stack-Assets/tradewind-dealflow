@@ -9,7 +9,7 @@ import {
 import { curriculumModules, executionWeeks } from "@/lib/content";
 
 export function AcademyWorkspace() {
-  const { data, updateData } = useLocalData();
+  const { data, updateData, writesSupported } = useLocalData();
   const completeModules = curriculumModules.filter(
     (module) => data.curriculum[module.id],
   ).length;
@@ -67,9 +67,10 @@ export function AcademyWorkspace() {
                       <label className="completion-toggle">
                         <input
                           type="checkbox"
+                          disabled={!writesSupported}
                           checked={checked}
                           onChange={(event) =>
-                            updateData((current) => ({
+                            void updateData((current) => ({
                               ...current,
                               curriculum: {
                                 ...current.curriculum,
@@ -112,9 +113,10 @@ export function AcademyWorkspace() {
                   <label>
                     <input
                       type="checkbox"
+                      disabled={!writesSupported}
                       checked={checked}
                       onChange={(event) =>
-                        updateData((current) => ({
+                        void updateData((current) => ({
                           ...current,
                           weekProgress: {
                             ...current.weekProgress,

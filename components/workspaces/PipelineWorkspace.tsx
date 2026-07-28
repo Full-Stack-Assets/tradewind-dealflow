@@ -57,7 +57,13 @@ const blankLead: LeadForm = {
 };
 
 export function PipelineWorkspace() {
-  const { data, updateData, replaceData, clearData } = useLocalData();
+  const {
+    data,
+    updateData,
+    replaceData,
+    clearData,
+    writesSupported,
+  } = useLocalData();
   const [form, setForm] = useState<LeadForm>(blankLead);
   const [showForm, setShowForm] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -79,7 +85,7 @@ export function PipelineWorkspace() {
     data.dealDeskDraft.dealId !== "" ||
     data.dealDeskDraft.summary !== "";
 
-  const addLead = (event: React.FormEvent) => {
+  const addLead = async (event: React.FormEvent) => {
     event.preventDefault();
     const askingPrice =
       form.askingPrice.trim() === "" ? null : Number(form.askingPrice);
@@ -120,27 +126,35 @@ export function PipelineWorkspace() {
       legalTitleDisclosureReady: false,
       attorneyReviewComplete: false,
     };
-    updateData((current) => ({
+    const result = await updateData((current) => ({
       ...current,
       deals: [lead, ...current.deals],
     }));
+    if (!result.ok) {
+      setMessage(result.message);
+      return;
+    }
     setForm(blankLead);
     setShowForm(false);
     setMessage("Property record added locally. No contact was initiated.");
   };
 
-  const removeLead = () => {
+  const removeLead = async () => {
     if (!deleteId) return;
-    updateData((current) => ({
+    const result = await updateData((current) => ({
       ...current,
       deals: current.deals.filter((deal) => deal.id !== deleteId),
     }));
+    if (!result.ok) {
+      setMessage(result.message);
+      return;
+    }
     setDeleteId(null);
     setMessage("Property record deleted from this browser.");
   };
 
   const updateStage = (id: string, stage: PipelineStage) => {
-    updateData((current) => ({
+    void updateData((current) => ({
       ...current,
       deals: current.deals.map((deal) =>
         deal.id === id
@@ -172,6 +186,7 @@ export function PipelineWorkspace() {
           <button
             className="button button-primary"
             type="button"
+            disabled={!writesSupported}
             onClick={() => setShowForm((current) => !current)}
             aria-expanded={showForm}
           >
@@ -219,6 +234,7 @@ export function PipelineWorkspace() {
           <button
             className="button button-quiet button-small"
             type="button"
+            disabled={!writesSupported}
             onClick={() => fileRef.current?.click()}
           >
             Import JSON
@@ -227,6 +243,7 @@ export function PipelineWorkspace() {
             className="visually-hidden"
             ref={fileRef}
             type="file"
+            disabled={!writesSupported}
             accept="application/json,.json"
             onChange={importFile}
             aria-label="Import a Tradewind DealFlow JSON backup"
@@ -396,7 +413,7 @@ export function PipelineWorkspace() {
             </p>
           </div>
           <div className="button-row">
-            <button className="button button-primary" type="submit">Add local record</button>
+            <button className="button button-primary" type="submit" disabled={!writesSupported}>Add local record</button>
             <button className="button button-quiet" type="button" onClick={() => setShowForm(false)}>Cancel</button>
           </div>
         </form>
@@ -451,6 +468,7 @@ export function PipelineWorkspace() {
                     <td>
                       <select
                         aria-label={`Stage for ${deal.address}`}
+                        disabled={!writesSupported}
                         value={deal.stage}
                         onChange={(event) => updateStage(deal.id, event.target.value as PipelineStage)}
                       >
@@ -459,7 +477,7 @@ export function PipelineWorkspace() {
                     </td>
                     <td>{deal.nextAction || <span className="muted-copy">None recorded</span>}</td>
                     <td>
-                      <button className="icon-button" type="button" onClick={() => setDeleteId(deal.id)} aria-label={`Delete ${deal.address}`}>
+                      <button className="icon-button" type="button" disabled={!writesSupported} onClick={() => setDeleteId(deal.id)} aria-label={`Delete ${deal.address}`}>
                         ×
                       </button>
                     </td>
@@ -477,7 +495,7 @@ export function PipelineWorkspace() {
             <strong>Reset local workspace</strong>
             <p>Export a backup first. This removes all local records and progress.</p>
           </div>
-          <button className="button button-danger-outline button-small" type="button" onClick={() => setClearOpen(true)}>
+          <button className="button button-danger-outline button-small" type="button" disabled={!writesSupported} onClick={() => setClearOpen(true)}>
             Clear all local data
           </button>
         </div>
@@ -497,8 +515,12 @@ export function PipelineWorkspace() {
         confirmLabel="Clear all data"
         cancelLabel="Cancel"
         onCancel={() => setClearOpen(false)}
-        onConfirm={() => {
-          clearData();
+        onConfirm={async () => {
+          const result = await clearData();
+          if (!result.ok) {
+            setMessage(result.message);
+            return;
+          }
           setClearOpen(false);
           setMessage("The local workspace was cleared.");
         }}
@@ -510,8 +532,13 @@ export function PipelineWorkspace() {
         confirmLabel="Import and replace"
         cancelLabel="Keep current data"
         onCancel={() => setPendingImport(null)}
-        onConfirm={() => {
-          if (pendingImport) replaceData(pendingImport);
+        onConfirm={async () => {
+          if (!pendingImport) return;
+          const result = await replaceData(pendingImport);
+          if (!result.ok) {
+            setMessage(result.message);
+            return;
+          }
           setPendingImport(null);
           setMessage("Validated backup imported successfully.");
         }}

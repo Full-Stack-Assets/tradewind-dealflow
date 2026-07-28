@@ -23,8 +23,6 @@ import type {
 } from "./types.ts";
 import { PIPELINE_STAGES } from "./types.ts";
 
-export const LOCAL_DATA_KEY = "tradewind-dealflow:v1";
-
 const MAX_ARRAY_LENGTH = 500;
 const MAX_STRING_LENGTH = 10_000;
 

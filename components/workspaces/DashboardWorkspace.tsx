@@ -23,7 +23,7 @@ const readinessItems = [
 ] as const;
 
 export function DashboardWorkspace() {
-  const { data, updateData } = useLocalData();
+  const { data, updateData, writesSupported } = useLocalData();
   const completedModules = curriculumModules.filter(
     (module) => data.curriculum[module.id],
   ).length;
@@ -45,7 +45,7 @@ export function DashboardWorkspace() {
     key: "selectedState" | "participationPath",
     value: StateCode | ParticipationPath | null,
   ) => {
-    updateData((current) => ({
+    void updateData((current) => ({
       ...current,
       preferences: { ...current.preferences, [key]: value },
     }));
@@ -84,6 +84,7 @@ export function DashboardWorkspace() {
                     data.preferences.selectedState === state ? "selected" : ""
                   }
                   type="button"
+                  disabled={!writesSupported}
                   key={state}
                   aria-pressed={data.preferences.selectedState === state}
                   onClick={() => setPreference("selectedState", state)}
@@ -101,6 +102,7 @@ export function DashboardWorkspace() {
             <div className="segmented path-segmented">
               <button
                 type="button"
+                disabled={!writesSupported}
                 className={
                   data.preferences.participationPath === "principal"
                     ? "selected"
@@ -116,6 +118,7 @@ export function DashboardWorkspace() {
               </button>
               <button
                 type="button"
+                disabled={!writesSupported}
                 className={
                   data.preferences.participationPath === "licensed"
                     ? "selected"
@@ -262,9 +265,10 @@ export function DashboardWorkspace() {
               <label className="check-row" key={item}>
                 <input
                   type="checkbox"
+                  disabled={!writesSupported}
                   checked={Boolean(data.readinessChecks[item])}
                   onChange={(event) =>
-                    updateData((current) => ({
+                    void updateData((current) => ({
                       ...current,
                       readinessChecks: {
                         ...current.readinessChecks,

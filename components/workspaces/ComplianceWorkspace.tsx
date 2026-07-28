@@ -22,7 +22,7 @@ import {
 import type { CancellationWindowRecord } from "@/lib/types";
 
 export function ComplianceWorkspace() {
-  const { data, updateData } = useLocalData();
+  const { data, updateData, writesSupported } = useLocalData();
   const [selectedDealId, setSelectedDealId] = useState("");
   const selectedDeal = data.deals.find((deal) => deal.id === selectedDealId);
   const today = new Date().toISOString().slice(0, 10);
@@ -61,7 +61,7 @@ export function ComplianceWorkspace() {
     key: "sellerWindow" | "assigneeWindow",
     patch: Partial<CancellationWindowRecord>,
   ) => {
-    updateData((current) => ({
+    void updateData((current) => ({
       ...current,
       compliance: {
         ...current.compliance,
@@ -79,7 +79,7 @@ export function ComplianceWorkspace() {
     checked: boolean,
   ) => {
     if (!selectedDeal) return;
-    updateData((current) => ({
+    void updateData((current) => ({
       ...current,
       deals: current.deals.map((deal) =>
         deal.id === selectedDeal.id
@@ -198,12 +198,14 @@ export function ComplianceWorkspace() {
             title="Seller window"
             record={data.compliance.sellerWindow}
             result={sellerWindow}
+            disabled={!writesSupported}
             onChange={(patch) => updateWindow("sellerWindow", patch)}
           />
           <CancellationTracker
             title="Assignee window"
             record={data.compliance.assigneeWindow}
             result={assigneeWindow}
+            disabled={!writesSupported}
             onChange={(patch) => updateWindow("assigneeWindow", patch)}
           />
         </div>
@@ -236,7 +238,7 @@ export function ComplianceWorkspace() {
             <label className="check-row" key={field}>
               <input
                 type="checkbox"
-                disabled={!selectedDeal}
+                disabled={!selectedDeal || !writesSupported}
                 checked={Boolean(selectedDeal?.[field as keyof typeof selectedDeal])}
                 onChange={(event) => updateDealGate(field as Parameters<typeof updateDealGate>[0], event.target.checked)}
               />
@@ -270,9 +272,10 @@ export function ComplianceWorkspace() {
               <label className="check-row" key={item}>
                 <input
                   type="checkbox"
+                  disabled={!writesSupported}
                   checked={Boolean(data.compliance.outreachChecks[item])}
                   onChange={(event) =>
-                    updateData((current) => ({
+                    void updateData((current) => ({
                       ...current,
                       compliance: {
                         ...current.compliance,
@@ -332,15 +335,17 @@ function CancellationTracker({
   title,
   record,
   result,
+  disabled,
   onChange,
 }: {
   title: string;
   record: CancellationWindowRecord;
   result: ReturnType<typeof evaluateCancellationWindow>;
+  disabled: boolean;
   onChange: (patch: Partial<CancellationWindowRecord>) => void;
 }) {
   return (
-    <fieldset className="window-card">
+    <fieldset className="window-card" disabled={disabled}>
       <legend>{title}</legend>
       <label>
         <span>Recorded contract date</span>

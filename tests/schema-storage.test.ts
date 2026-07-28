@@ -3,10 +3,19 @@ import test from "node:test";
 
 import {
   createEmptyData,
-  LOCAL_DATA_KEY,
   serializePipelineCsv,
   validateImport,
 } from "../lib/import-export.ts";
+import {
+  clearStoredWorkspace,
+  LEGACY_LOCAL_DATA_KEY,
+  LOCAL_DATA_KEY,
+  MAX_WORKSPACE_BYTES,
+  mutateStoredWorkspace,
+  readStoredWorkspace,
+  writeStoredWorkspace,
+  type WorkspaceLockManager,
+} from "../lib/local-storage.ts";
 
 function makeVersionOneWorkspace(): Record<string, unknown> {
   return {
@@ -95,10 +104,6 @@ test("v1 migration preserves DNC and never invents provenance", () => {
   );
 });
 
-test("the shipped local key remains readable until the storage migration ships", () => {
-  assert.equal(LOCAL_DATA_KEY, "tradewind-dealflow:v1");
-});
-
 test("v2 validation strips no unknown data and rejects it instead", () => {
   const candidate = { ...createEmptyData(), unexpected: "not allowed" };
   const result = validateImport(candidate);
@@ -136,4 +141,228 @@ test("pipeline CSV neutralizes spreadsheet formulas", () => {
     attorneyReviewComplete: false,
   });
   assert.match(serializePipelineCsv(data.deals), /'=/);
+});
+
+function memoryStorage(initial: Record<string, string> = {}) {
+  const values = new Map(Object.entries(initial));
+  let setItemCalls = 0;
+  return {
+    get setItemCalls() {
+      return setItemCalls;
+    },
+    getItem(key: string) {
+      return values.get(key) ?? null;
+    },
+    setItem(key: string, value: string) {
+      setItemCalls += 1;
+      values.set(key, value);
+    },
+    removeItem(key: string) {
+      values.delete(key);
+    },
+  };
+}
+
+function throwingStorage(errorName: string, currentValue: string) {
+  const storage = memoryStorage({ [LOCAL_DATA_KEY]: currentValue });
+  return {
+    getItem: storage.getItem,
+    removeItem: storage.removeItem,
+    setItem() {
+      const error = new Error("sensitive browser detail");
+      error.name = errorName;
+      throw error;
+    },
+  };
+}
+
+function immediateLocks(onRequest?: (name: string) => void): WorkspaceLockManager {
+  return {
+    request: async <T>(name: string, callback: () => Promise<T> | T) => {
+      onRequest?.(name);
+      return callback();
+    },
+  };
+}
+
+test("current v2 storage is preferred over a valid legacy snapshot", () => {
+  const current = createEmptyData("2026-07-28T10:00:00.000Z");
+  current.revision = 3;
+  const storage = memoryStorage({
+    [LOCAL_DATA_KEY]: JSON.stringify(current),
+    [LEGACY_LOCAL_DATA_KEY]: JSON.stringify(makeVersionOneWorkspace()),
+  });
+
+  const result = readStoredWorkspace(
+    storage,
+    new Date("2026-07-28T12:00:00Z"),
+  );
+
+  assert.equal(result.status, "current");
+  assert.equal(result.data.revision, 3);
+});
+
+test("corrupt current storage recovers valid legacy without overwriting it", () => {
+  const storage = memoryStorage({
+    [LOCAL_DATA_KEY]: "{broken",
+    [LEGACY_LOCAL_DATA_KEY]: JSON.stringify(makeVersionOneWorkspace()),
+  });
+
+  const result = readStoredWorkspace(
+    storage,
+    new Date("2026-07-28T12:00:00Z"),
+  );
+
+  assert.equal(result.status, "recovered-legacy");
+  assert.equal(result.data.schemaVersion, 2);
+  assert.equal(storage.getItem(LOCAL_DATA_KEY), "{broken");
+  assert.equal(storage.setItemCalls, 0);
+});
+
+test("storage is corrupt when every present snapshot is invalid", () => {
+  const storage = memoryStorage({
+    [LOCAL_DATA_KEY]: "{broken",
+    [LEGACY_LOCAL_DATA_KEY]: JSON.stringify({ schemaVersion: 1 }),
+  });
+
+  const result = readStoredWorkspace(storage);
+
+  assert.equal(result.status, "corrupt");
+  assert.equal("data" in result, false);
+});
+
+test("storage is empty only when both keys are absent", () => {
+  const result = readStoredWorkspace(
+    memoryStorage(),
+    new Date("2026-07-28T12:00:00Z"),
+  );
+
+  assert.equal(result.status, "empty");
+  assert.equal(result.data.schemaVersion, 2);
+  assert.equal(result.data.revision, 0);
+});
+
+test("bounded write preserves the old value on quota failure", () => {
+  const storage = throwingStorage("QuotaExceededError", '{"old":true}');
+
+  const result = writeStoredWorkspace(storage, createEmptyData());
+
+  assert.equal(result.ok, false);
+  assert.equal(storage.getItem(LOCAL_DATA_KEY), '{"old":true}');
+  if (!result.ok) {
+    assert.doesNotMatch(result.message, /sensitive browser detail|\{"old"/);
+  }
+});
+
+test("oversized workspace is rejected before setItem", () => {
+  const storage = memoryStorage();
+  const data = createEmptyData();
+  data.dealDeskDraft.summary = "x".repeat(MAX_WORKSPACE_BYTES);
+
+  const result = writeStoredWorkspace(storage, data);
+
+  assert.equal(result.ok, false);
+  assert.equal(storage.setItemCalls, 0);
+});
+
+test("locked mutation reads latest data, validates, stamps, and increments revision", async () => {
+  const current = createEmptyData("2026-07-28T10:00:00.000Z");
+  current.revision = 7;
+  const storage = memoryStorage({
+    [LOCAL_DATA_KEY]: JSON.stringify(current),
+  });
+  const requestedNames: string[] = [];
+
+  const result = await mutateStoredWorkspace(
+    storage,
+    immediateLocks((name) => requestedNames.push(name)),
+    (latest) => ({
+      ...latest,
+      preferences: { ...latest.preferences, selectedState: "MA" },
+    }),
+    new Date("2026-07-28T12:00:00Z"),
+  );
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(requestedNames, ["tradewind-dealflow:workspace-write"]);
+  const saved = JSON.parse(storage.getItem(LOCAL_DATA_KEY) ?? "{}");
+  assert.equal(saved.revision, 8);
+  assert.equal(saved.updatedAt, "2026-07-28T12:00:00.000Z");
+  assert.equal(saved.preferences.selectedState, "MA");
+});
+
+test("default mutation time is obtained only after the lock is granted", async () => {
+  const storage = memoryStorage();
+  let lockHeld = false;
+  const locks: WorkspaceLockManager = {
+    request: async <T>(_name: string, callback: () => Promise<T> | T) => {
+      lockHeld = true;
+      const result = await callback();
+      lockHeld = false;
+      return result;
+    },
+  };
+
+  const result = await mutateStoredWorkspace(
+    storage,
+    locks,
+    (latest) => latest,
+    () => {
+      assert.equal(lockHeld, true);
+      return new Date("2026-07-28T12:00:00Z");
+    },
+  );
+
+  assert.equal(result.ok, true);
+  const saved = JSON.parse(storage.getItem(LOCAL_DATA_KEY) ?? "{}");
+  assert.equal(saved.updatedAt, "2026-07-28T12:00:00.000Z");
+});
+
+test("locked mutation blocks corrupt storage before calling the updater", async () => {
+  const storage = memoryStorage({ [LOCAL_DATA_KEY]: "{broken" });
+  let updaterCalled = false;
+
+  const result = await mutateStoredWorkspace(
+    storage,
+    immediateLocks(),
+    (latest) => {
+      updaterCalled = true;
+      return latest;
+    },
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(updaterCalled, false);
+  assert.equal(storage.setItemCalls, 0);
+});
+
+test("mutation does not use an unlocked fallback", async () => {
+  const storage = memoryStorage();
+
+  const result = await mutateStoredWorkspace(
+    storage,
+    null,
+    (latest) => latest,
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(storage.setItemCalls, 0);
+});
+
+test("clear removes current and legacy snapshots inside the workspace lock", async () => {
+  const storage = memoryStorage({
+    [LOCAL_DATA_KEY]: "{broken",
+    [LEGACY_LOCAL_DATA_KEY]: JSON.stringify(makeVersionOneWorkspace()),
+  });
+  const requestedNames: string[] = [];
+
+  const result = await clearStoredWorkspace(
+    storage,
+    immediateLocks((name) => requestedNames.push(name)),
+  );
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(requestedNames, ["tradewind-dealflow:workspace-write"]);
+  assert.equal(storage.getItem(LOCAL_DATA_KEY), null);
+  assert.equal(storage.getItem(LEGACY_LOCAL_DATA_KEY), null);
 });
