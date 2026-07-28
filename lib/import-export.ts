@@ -26,6 +26,7 @@ import {
   createDefaultBuyBox,
   normalizeBuyBox,
 } from "./qualification.ts";
+import { normalizeLaunchBuyBox } from "./launch-qualification.ts";
 
 const MAX_ARRAY_LENGTH = 500;
 const MAX_STRING_LENGTH = 10_000;
@@ -419,21 +420,31 @@ function reconstructBuyBox(raw: unknown): BuyBoxConfig | null {
     financialThresholds,
     weights,
   };
-  if (currentWeights) {
-    const validation = normalizeBuyBox(
-      reconstructed,
-      reconstructed,
-      new Date(raw.updatedAt),
-    );
-    if (!validation.ok) return null;
-    return {
-      ...validation.value,
-      configured: reconstructed.configured,
-      version: reconstructed.version,
-      updatedAt: reconstructed.updatedAt,
-    };
-  }
-  return reconstructed;
+  const validation = normalizeBuyBox(
+    reconstructed,
+    reconstructed,
+    new Date(raw.updatedAt),
+  );
+  if (!validation.ok) return null;
+  const normalized = {
+    ...validation.value,
+    configured: reconstructed.configured,
+    version: reconstructed.version,
+    updatedAt: reconstructed.updatedAt,
+  };
+  if (!normalized.configured) return normalized;
+
+  const launchValidation = normalizeLaunchBuyBox(
+    normalized,
+    normalized,
+    new Date(raw.updatedAt),
+  );
+  if (!launchValidation.ok) return null;
+  return {
+    ...launchValidation.value,
+    version: reconstructed.version,
+    updatedAt: reconstructed.updatedAt,
+  };
 }
 
 function migrateLegacyMarketsByState(

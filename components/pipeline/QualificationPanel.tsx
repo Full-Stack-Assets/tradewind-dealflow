@@ -4,7 +4,10 @@ import { useMemo, useState } from "react";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useLocalData } from "@/components/LocalDataProvider";
-import { formatProvenanceDate } from "@/lib/display-date";
+import {
+  formatOperationalInstant,
+  formatProvenanceDate,
+} from "@/lib/display-date";
 import { StatusPill } from "@/components/WorkspaceShell";
 import {
   resolveFactConflict,
@@ -501,11 +504,11 @@ function RestrictionItem({
       <p>{restriction.reason}</p>
       <small>
         Source: {restriction.source} · Created{" "}
-        {formatProvenanceDate(restriction.createdAt)}
+        {formatOperationalInstant(restriction.createdAt)}
       </small>
       {restriction.resolvedAt !== null && (
         <p className="muted-copy">
-          Resolved {formatProvenanceDate(restriction.resolvedAt)}:{" "}
+          Resolved {formatOperationalInstant(restriction.resolvedAt)}:{" "}
           {restriction.resolutionNote}
         </p>
       )}

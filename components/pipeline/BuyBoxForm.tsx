@@ -8,25 +8,16 @@ import {
 
 import { useLocalData } from "@/components/LocalDataProvider";
 import {
-  type BuyBoxValidationResult,
-} from "@/lib/qualification";
-import { normalizeLaunchBuyBox } from "@/lib/launch-qualification";
+  mapLaunchBuyBoxValidationErrors,
+  normalizeLaunchBuyBox,
+  type LaunchBuyBoxFieldKey,
+} from "@/lib/launch-qualification";
 import type {
   BuyBoxConfig,
   DataConfidence,
   RehabLevel,
   StateCode,
 } from "@/lib/types";
-
-type FieldKey =
-  | "states"
-  | "markets"
-  | "propertyTypes"
-  | "prices"
-  | "rehab"
-  | "confidence"
-  | "freshness"
-  | "financial";
 
 type BuyBoxDraft = {
   states: StateCode[];
@@ -54,7 +45,9 @@ const CONFIDENCE_LEVELS: DataConfidence[] = ["Low", "Medium", "High"];
 export function BuyBoxForm() {
   const { data, updateData, writesSupported } = useLocalData();
   const [draft, setDraft] = useState(() => draftFromBuyBox(data.buyBox));
-  const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
+  const [errors, setErrors] = useState<
+    Partial<Record<LaunchBuyBoxFieldKey, string>>
+  >({});
   const [message, setMessage] = useState("");
   const formRef = useRef<HTMLFormElement>(null);
 
@@ -67,7 +60,7 @@ export function BuyBoxForm() {
       new Date(),
     );
     if (!validation.ok) {
-      const nextErrors = errorsFromValidation(validation);
+      const nextErrors = mapLaunchBuyBoxValidationErrors(validation);
       setErrors(nextErrors);
       setMessage("Review the marked buy-box fields before saving.");
       requestAnimationFrame(() => focusFirstInvalid(formRef.current));
@@ -503,32 +496,6 @@ function candidateFromDraft(
       ),
     },
   };
-}
-
-function errorsFromValidation(
-  result: Extract<BuyBoxValidationResult, { ok: false }>,
-): Partial<Record<FieldKey, string>> {
-  const mapped: Partial<Record<FieldKey, string>> = {};
-  for (const error of result.errors) {
-    const normalized = error.toLowerCase();
-    const key: FieldKey = /state/.test(normalized)
-      ? "states"
-      : /market/.test(normalized)
-        ? "markets"
-        : /property type/.test(normalized)
-          ? "propertyTypes"
-          : /price/.test(normalized)
-            ? "prices"
-            : /rehab/.test(normalized)
-              ? "rehab"
-              : /confidence/.test(normalized)
-                ? "confidence"
-                : /fresh|verification age/.test(normalized)
-                  ? "freshness"
-                  : "financial";
-    mapped[key] = mapped[key] ? `${mapped[key]} ${error}` : error;
-  }
-  return mapped;
 }
 
 function focusFirstInvalid(form: HTMLFormElement | null) {

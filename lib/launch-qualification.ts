@@ -76,6 +76,42 @@ export type LaunchQualificationView = {
   sellerFit: "Unassessed" | "Assessed";
 };
 
+export type LaunchBuyBoxFieldKey =
+  | "states"
+  | "markets"
+  | "propertyTypes"
+  | "prices"
+  | "rehab"
+  | "confidence"
+  | "freshness"
+  | "financial";
+
+export function mapLaunchBuyBoxValidationErrors(
+  result: Extract<BuyBoxValidationResult, { ok: false }>,
+): Partial<Record<LaunchBuyBoxFieldKey, string>> {
+  const mapped: Partial<Record<LaunchBuyBoxFieldKey, string>> = {};
+  for (const error of result.errors) {
+    const normalized = error.toLowerCase();
+    const key: LaunchBuyBoxFieldKey = /state/.test(normalized)
+      ? "states"
+      : /market/.test(normalized)
+        ? "markets"
+        : /property type/.test(normalized)
+          ? "propertyTypes"
+          : /price/.test(normalized)
+            ? "prices"
+            : /rehab/.test(normalized)
+              ? "rehab"
+              : /confidence/.test(normalized)
+                ? "confidence"
+                : /fresh|verification age/.test(normalized)
+                  ? "freshness"
+                  : "financial";
+    mapped[key] = mapped[key] ? `${mapped[key]} ${error}` : error;
+  }
+  return mapped;
+}
+
 export function normalizeLaunchBuyBox(
   input: BuyBoxConfig,
   previous: BuyBoxConfig,
@@ -114,7 +150,7 @@ export function normalizeLaunchBuyBox(
     );
     if (canonical === undefined) {
       errors.push(
-        `${String(rawType)} is outside the frozen residential 1–4 family launch scope.`,
+        `Property type "${String(rawType)}" is outside the frozen residential 1–4 family launch scope.`,
       );
     } else {
       canonicalTypes.push(canonical);

@@ -334,6 +334,53 @@ test("strict current buy-box import accepts a valid ISO timestamp with an explic
   assert.equal(result.data.buyBox.updatedAt, "2026-07-27T08:00:00-04:00");
 });
 
+test("configured launch-scope expansion is rejected by backup restore and stored hydration", async () => {
+  const now = new Date("2026-07-28T12:00:00.000Z");
+  const mutations: Array<(data: ReturnType<typeof createEmptyData>) => void> = [
+    (data) => {
+      data.buyBox.marketsByState.MA.push("plymouth county");
+    },
+    (data) => {
+      data.buyBox.propertyTypes.push("mixed-use");
+    },
+  ];
+
+  for (const mutate of mutations) {
+    const expanded = createEmptyData("2026-07-27T12:00:00.000Z");
+    mutate(expanded);
+    const serialized = JSON.stringify(expanded);
+    const bytes = new TextEncoder().encode(serialized).byteLength;
+
+    const backup = await readWorkspaceBackup(
+      { size: bytes, text: async () => serialized },
+      now,
+    );
+    assert.equal(backup.ok, false);
+
+    const hydrated = readStoredWorkspace(
+      memoryStorage({ [LOCAL_DATA_KEY]: serialized }),
+      now,
+    );
+    assert.equal(hydrated.status, "corrupt");
+  }
+});
+
+test("an unconfigured record-free workspace remains valid before launch activation", () => {
+  const data = createEmptyData("2026-07-27T12:00:00.000Z");
+  data.buyBox.configured = false;
+  data.buyBox.marketsByState.MA.push("plymouth county");
+  data.buyBox.propertyTypes.push("mixed-use");
+  assert.equal(data.deals.length, 0);
+
+  const result = validateImport(
+    data,
+    new Date("2026-07-28T12:00:00.000Z"),
+  );
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.data.buyBox.configured, false);
+});
+
 test("source provenance timestamps reject malformed and future values while verification may be null", () => {
   const now = new Date("2026-07-28T12:00:00.000Z");
   for (const [field, value] of [
@@ -354,24 +401,20 @@ test("source provenance timestamps reject malformed and future values while veri
   assert.equal(validateImport(unknownVerification, now).ok, true);
 });
 
-test("legacy global buy-box markets migrate known labels without cross-state leakage", () => {
+test("configured legacy global buy-box market migrates within the frozen launch scope", () => {
   const candidate = createEmptyData("2026-07-27T12:00:00.000Z") as unknown as {
     buyBox: Record<string, unknown>;
   };
   delete candidate.buyBox.marketsByState;
-  candidate.buyBox.markets = [
-    "Fall River",
-    "Providence",
-    "Bristol County",
-  ];
-  candidate.buyBox.states = ["MA", "RI"];
+  candidate.buyBox.markets = ["Bristol County"];
+  candidate.buyBox.states = ["MA"];
 
   const result = validateImport(candidate);
   assert.equal(result.ok, true);
   if (!result.ok) return;
   assert.deepEqual(result.data.buyBox.marketsByState, {
-    MA: ["bristol county", "fall river"],
-    RI: ["bristol county", "providence"],
+    MA: ["bristol county"],
+    RI: [],
   });
 });
 

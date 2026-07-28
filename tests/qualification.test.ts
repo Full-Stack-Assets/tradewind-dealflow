@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { formatProvenanceDate } from "../lib/display-date.ts";
+import * as displayDate from "../lib/display-date.ts";
 import {
   createDefaultBuyBox,
   labelResearchPriority,
@@ -25,11 +25,36 @@ const evaluationDate = new Date("2026-07-28T12:00:00Z");
 
 test("provenance calendar dates render in UTC without rolling back a day", () => {
   assert.equal(
-    formatProvenanceDate("2026-07-20T00:00:00.000Z"),
+    displayDate.formatProvenanceDate("2026-07-20T00:00:00.000Z"),
     "Jul 20, 2026",
   );
-  assert.equal(formatProvenanceDate("2026-07-20"), "Jul 20, 2026");
-  assert.equal(formatProvenanceDate(null), "Unverified / unknown");
+  assert.equal(
+    displayDate.formatProvenanceDate("2026-07-20"),
+    "Jul 20, 2026",
+  );
+  assert.equal(
+    displayDate.formatProvenanceDate(null),
+    "Unverified / unknown",
+  );
+});
+
+test("operational restriction instants render in New York with an explicit zone", () => {
+  const formatOperational = (
+    displayDate as unknown as {
+      formatOperationalInstant?: (value: string | null) => string;
+    }
+  ).formatOperationalInstant;
+  assert.equal(typeof formatOperational, "function");
+  if (!formatOperational) return;
+
+  assert.equal(
+    formatOperational("2026-07-29T01:30:00.000Z"),
+    "Jul 28, 2026, 9:30 PM EDT",
+  );
+  assert.equal(
+    displayDate.formatProvenanceDate("2026-07-29T00:00:00.000Z"),
+    "Jul 29, 2026",
+  );
 });
 
 function configuredBuyBox(
@@ -301,6 +326,35 @@ test("launch buy-box validation rejects geography or property-type expansion", (
     const result = normalizeLaunch(expanded, previous, evaluationDate);
     assert.equal(result.ok, false);
   }
+});
+
+test("launch property-type errors map only to the property-type form field", () => {
+  const mapErrors = (
+    launchQualification as unknown as {
+      mapLaunchBuyBoxValidationErrors?: (
+        result: Extract<ReturnType<typeof normalizeBuyBox>, { ok: false }>,
+      ) => Partial<Record<string, string>>;
+    }
+  ).mapLaunchBuyBoxValidationErrors;
+  assert.equal(typeof mapErrors, "function");
+  if (!mapErrors) return;
+
+  const previous = createDefaultBuyBox("2026-07-27T12:00:00.000Z");
+  const result = launchQualification.normalizeLaunchBuyBox(
+    {
+      ...previous,
+      propertyTypes: ["Mixed-use"],
+    },
+    previous,
+    evaluationDate,
+  );
+  assert.equal(result.ok, false);
+  if (result.ok) return;
+
+  const mapped = mapErrors(result);
+  assert.deepEqual(Object.keys(mapped), ["propertyTypes"]);
+  assert.match(mapped.propertyTypes ?? "", /property type/i);
+  assert.equal(mapped.financial, undefined);
 });
 
 test("semantic saves normalize, dedupe, and increment only material changes", () => {
