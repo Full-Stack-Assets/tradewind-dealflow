@@ -1527,6 +1527,232 @@ input[type="radio"] {
   margin: 1rem 0;
 }
 
+.snapshot-boundary {
+  margin-bottom: 1rem;
+  padding: 1rem 1.2rem;
+  border-left: 4px solid var(--teal-600);
+  background: var(--sea-100);
+}
+
+.snapshot-boundary p {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.configuration-summary-grid,
+.system-health-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 1rem 0;
+}
+
+.configuration-summary-grid > div,
+.system-health-grid > div {
+  min-width: 0;
+  padding: 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdfc;
+}
+
+.configuration-summary-grid span,
+.system-health-grid dt {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.configuration-summary-grid strong,
+.system-health-grid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--navy-900);
+  font-size: 0.8rem;
+}
+
+.section-heading-row {
+  display: flex;
+  gap: 1rem;
+  align-items: end;
+  justify-content: space-between;
+  margin: 1.3rem 0 0.7rem;
+}
+
+.section-heading-row h2 {
+  margin: 0.35rem 0 0;
+}
+
+.section-heading-row p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.qualification-count-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin: 0;
+}
+
+.qualification-count-grid > div {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+}
+
+.qualification-count-grid dt {
+  min-height: 2.4em;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 720;
+}
+
+.qualification-count-grid dd {
+  margin: 0.45rem 0 0;
+  color: var(--navy-900);
+  font-size: 1.7rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 820;
+}
+
+.compact-count-list {
+  margin: 0;
+}
+
+.compact-count-list > div {
+  display: flex;
+  gap: 1rem;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--line);
+}
+
+.compact-count-list dt {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.compact-count-list dd {
+  margin: 0;
+  color: var(--navy-900);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 820;
+}
+
+.queue-count {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 720;
+}
+
+.research-queue-list {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.research-queue-list > li {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fbfdfc;
+}
+
+.research-priority {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 0.5rem;
+  background: var(--navy-900);
+  color: var(--white);
+  text-align: center;
+}
+
+.research-priority strong {
+  font-size: 1.55rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.research-priority span {
+  color: var(--sea-300);
+  font-size: 0.64rem;
+  font-weight: 760;
+}
+
+.research-record {
+  min-width: 0;
+  padding: 1rem;
+}
+
+.research-record h3 {
+  margin: 0.2rem 0;
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+}
+
+.research-record h3 a,
+.system-health-grid a {
+  color: var(--teal-700);
+}
+
+.research-record p {
+  margin: 0.2rem 0 0.6rem;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.research-record small {
+  display: block;
+  color: #7b898c;
+  font-size: 0.67rem;
+}
+
+.empty-workflow {
+  padding: 1.2rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  background: var(--sand-100);
+}
+
+.empty-workflow h3 {
+  margin: 0.45rem 0;
+}
+
+.empty-workflow p,
+.empty-workflow ol {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.empty-workflow ol {
+  margin-bottom: 0;
+  padding-left: 1.25rem;
+}
+
+.empty-workflow li + li {
+  margin-top: 0.35rem;
+}
+
+.empty-workflow a {
+  color: var(--teal-700);
+  font-weight: 760;
+}
+
 .progress-number {
   color: var(--teal-700);
   font-size: 1.45rem;
@@ -3787,6 +4013,10 @@ input[type="radio"] {
     grid-template-columns: 1fr 1fr;
   }
 
+  .qualification-count-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .interview-grid {
     grid-template-columns: 1fr 1fr;
   }
@@ -4034,6 +4264,20 @@ input[type="radio"] {
     grid-template-columns: 1fr;
   }
 
+  .configuration-summary-grid,
+  .system-health-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .section-heading-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .qualification-count-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .lane-summary {
     grid-column: auto;
   }
@@ -4171,6 +4415,24 @@ input[type="radio"] {
 
   .metric-grid {
     grid-template-columns: 1fr;
+  }
+
+  .qualification-count-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .qualification-count-grid dt {
+    min-height: auto;
+  }
+
+  .research-queue-list > li {
+    grid-template-columns: 1fr;
+  }
+
+  .research-priority {
+    min-height: 58px;
+    flex-direction: row;
+    gap: 0.5rem;
   }
 
   .segmented {

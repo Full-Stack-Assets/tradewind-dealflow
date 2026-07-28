@@ -1,146 +1,165 @@
-# Massachusetts / Rhode Island Pre-Launch Compliance Review
+# Massachusetts / Rhode Island Compliance Review Checklist
 
-Baseline researched: July 27, 2026  
-Purpose: attorney and closing-professional review checklist  
-Status: educational working document; **not legal advice**
+Source baseline reviewed: July 28, 2026
 
-This checklist must be reviewed by Massachusetts and Rhode Island real-estate
-counsel before transaction documents, disposition marketing, or an outreach
-channel is activated. Record the reviewer, date, jurisdiction, conclusions, and
-document/template version outside the public application.
+Purpose: operational questions for licensed counsel and closing professionals
 
-## 1. Business role and licensing
+Status: educational review aid; **not legal advice**
 
-- [ ] Legal entity, trade name, addresses, and actual role are correct.
-- [ ] Massachusetts counsel has analyzed M.G.L. c. 112, §§ 87PP, 87QQ, and
-      87RR for the proposed principal and/or licensed workflow.
-- [ ] Rhode Island counsel has analyzed Public Law 2026, chapter 410, including
-      its January 1, 2027 effective date and any licensing implications.
-- [ ] No workflow permits negotiating for another for compensation unless a
-      properly licensed and supervised structure is documented.
-- [ ] No informal finder-fee workflow is offered.
-- [ ] Every public description distinguishes control of a contractual interest
-      from ownership of legal title.
-- [ ] Tradewind’s actual financial interest is disclosed without implying
-      agency, legal representation, guaranteed funding, or guaranteed purchase.
+This checklist does not determine that any strategy, contact, disclosure,
+contract, marketing action, compensation structure, or closing procedure is
+lawful. Record scoped professional conclusions before activation.
 
-## 2. Agreements and disposition
+## Product safety boundary
 
-- [ ] Counsel has approved the exact state-specific acquisition agreement and
-      version.
-- [ ] Assignment rights, restrictions, and required disclosures are confirmed.
-- [ ] Marketing cannot unlock without an executed agreement and recorded
-      contractual/equitable-interest basis.
-- [ ] Marketing copy states that legal title is not held when that is true.
-- [ ] The operator does not negotiate on behalf of the seller or buyer.
-- [ ] Public marketing, buyer selection, and sharing seller-sensitive
-      information require human approval.
-- [ ] Double-close process and closing-professional requirements are confirmed.
-- [ ] Novation is blocked pending transaction-specific specialist review,
-      disclosure, and approved documents.
-- [ ] Seller financing is blocked pending counsel, lending/usury, tax, servicing,
-      disclosure, and ability-to-repay analysis as applicable.
-- [ ] Subject-to is blocked pending specialist review of due-on-sale, insurance,
-      servicing, title, seller-credit, default, and disclosure risks.
-- [ ] No executable form is called “attorney approved” without written approval
-      from applicable state counsel for that exact version and use.
+Until the applicable review is recorded, keep these actions disabled or
+outside the application:
 
-## 3. Rhode Island heightened workflow
+- automated cold SMS, prerecorded/AI voice, and mass dialing;
+- first-contact sending;
+- formal offers and executable contracts;
+- public property or equitable-interest marketing;
+- novation, subject-to, seller financing, lease-option, wrap, and disputed or
+  vulnerable-party workflows;
+- sensitive seller-data sharing and final buyer selection;
+- deposits, fund movement, document recording, and closing instructions.
 
-- [ ] Permanent January 1, 2027 transition notice is accurate and current.
-- [ ] Recurring wholesaling defaults to licensed-path review.
-- [ ] Seller disclosure wording and delivery evidence are approved.
-- [ ] Assignee disclosure wording and delivery evidence are approved.
-- [ ] Nonwaivable seller cancellation window is defined and tracked.
-- [ ] Nonwaivable assignee cancellation window is defined and tracked.
-- [ ] “Business day” and the authoritative holiday calendar are confirmed.
-- [ ] The assignee’s choice of closing provider is protected.
-- [ ] Assignment readiness remains blocked while either cancellation period is
-      open or unconfirmed.
-- [ ] The business does not depend on an assumed first-transaction exception.
+Qualification and research may continue, but a score never authorizes one of
+those actions.
 
-## 4. Outreach remains disabled until separately approved
+## Massachusetts review
 
-- [ ] Campaign business registration requirements are documented for each state.
-- [ ] National and applicable state Do Not Call processes are implemented.
-- [ ] Contact-source license permits the intended channel and purpose.
-- [ ] Channel-specific consent or another attorney-approved legal basis is
-      recorded per recipient.
-- [ ] Company suppression and prior opt-outs are checked before every action.
-- [ ] Calling hours, frequency limits, caller identity, and required disclosures
-      are configured.
-- [ ] Immediate opt-out and complaint processing is tested across every channel.
-- [ ] TCPA, FCC robocall/robotext, FTC Telemarketing Sales Rule, state
-      telemarketing, CAN-SPAM, call-recording, and direct-mail requirements are
-      reviewed for the precise campaign.
-- [ ] Cold text, prerecorded call, AI voice, and mass-dialing capabilities remain
-      technically disabled unless campaign-specific counsel approval and consent
-      evidence are present.
-- [ ] First launch of every market, provider, channel, campaign, and materially
-      changed template requires named human approval.
-- [ ] Immutable campaign, consent, suppression, message-version, delivery,
-      complaint, and approval records are retained under an approved schedule.
+The official General Court sources describe covered broker activity,
+exemptions, and unlicensed-activity/compensation restrictions in
+[M.G.L. c. 112, § 87PP](https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section87PP),
+[§ 87QQ](https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section87QQ),
+and
+[§ 87RR](https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section87RR).
+Counsel must determine how those provisions apply to the actual Tradewind
+principal or licensed workflow.
 
-## 5. Fair housing, privacy, and data use
+- [ ] Under what exact conditions may the business purchase as a principal?
+- [ ] Which repeated acquisition, negotiation, assignment, referral, or
+      compensation activities could be treated as brokerage?
+- [ ] What principal-status and financial-interest disclosures are required?
+- [ ] What may be marketed when the business holds only a contractual or
+      equitable interest?
+- [ ] Which purchase, assignment, double-closing, cancellation, and disclosure
+      documents are approved for the exact use and version?
+- [ ] Which activities require a licensed and supervised broker/agent partner?
+- [ ] Under what conditions, if any, may a referral fee be received?
+- [ ] What must trigger transaction-specific attorney review?
 
-- [ ] No protected or sensitive characteristic is collected for scoring,
-      targeting, motivation inference, or neighborhood selection.
-- [ ] Distress information is voluntary, minimized, access-controlled, and never
-      used invasively in message copy.
-- [ ] Each external source has documented rights, purpose limits, retrieval date,
-      record identifier, confidence, and last-verification date.
-- [ ] No website is scraped contrary to terms or access controls.
-- [ ] Public records are not assumed to authorize every marketing use.
-- [ ] Privacy notice, retention schedule, export/deletion process, breach plan,
-      and vendor agreements are approved before server-side personal data exists.
-- [ ] Proof-of-funds and identity records receive enhanced controls and are not
-      stored in free-form notes.
+For outreach review, use the Commonwealth’s
+[telemarketing-law guide](https://www.mass.gov/info-details/massachusetts-law-about-telemarketing),
+[201 CMR 12.00 page](https://www.mass.gov/regulations/201-CMR-1200-massachusetts-do-not-call-registry),
+and
+[Do Not Call information](https://www.mass.gov/info-details/do-not-call-registry-for-residents-and-businesses).
+The regulation page labels its web copy unofficial, so counsel should verify
+the controlling text before a campaign is activated.
 
-## 6. Human approval and vulnerable-seller controls
+- [ ] Which registration, list-access, calling-hour, identification,
+      recorded-message, recordkeeping, and suppression requirements apply to
+      the precise proposed channel and audience?
+- [ ] Are manual calls, direct mail, or email supportable for the one proposed
+      source and market, and under what documented legal basis?
 
-- [ ] Formal offers, letters of intent, contracts, amendments, and closing
-      instructions always require human approval.
-- [ ] Pricing outside approved thresholds requires human approval.
-- [ ] Novation, seller financing, subject-to, earnest money, public marketing,
-      final buyer selection, and sensitive disclosure require human approval.
-- [ ] Distress, confusion, incapacity, foreclosure, bankruptcy, probate, identity
-      dispute, complaint, or legal-advice request routes to specialist review.
-- [ ] No system function signs, binds, transfers funds, records documents, or
-      makes legal representations.
+## Rhode Island review
 
-## 7. Closing-professional review
+[2026 Public Law Chapter 410](https://webserver.rilegislature.gov/PublicLaws/law26/law26411.htm)
+is the official enacted H 7840 Substitute A source used by this product
+baseline. Its text states a January 1, 2027 effective date and contains the
+wholesaling provisions that counsel must verify for licensing, disclosures,
+cancellation periods, assignee closing-provider choice, remedies, and
+transition. The
+[2026 public-law index](https://webserver.rilegislature.gov/Lawrevision/plshort/pl2026sub.htm)
+records the enactment history.
 
-- [ ] Massachusetts closing workflow, title review, deposit handling, and
-      recording responsibilities are documented.
-- [ ] Rhode Island closing workflow and assignee closing-provider choice are
-      documented.
-- [ ] Title, lien, occupancy, tenant, access, insurance, tax, utility, payoff,
-      and probate/bankruptcy checks have responsible professionals.
-- [ ] Projected economics are kept separate from settlement statements and
-      realized results.
-- [ ] Record retention and post-closing reconciliation are approved.
+Tradewind conservatively shows the transition warning and heightened review
+before the effective date. That is product policy, not a claim that the future
+law is already operative.
 
-## 8. Official source baseline
+- [ ] Confirm the final effective date and every applicable transition rule.
+- [ ] Determine whether licensing or an exemption applies to each planned
+      activity.
+- [ ] Approve the exact seller and assignee disclosure versions and delivery
+      evidence.
+- [ ] Confirm each nonwaivable review/cancellation period and the controlling
+      definition of business day.
+- [ ] Confirm the authoritative holiday calendar. Do not calculate a deadline
+      from an unverified calendar.
+- [ ] Confirm permitted equitable-interest marketing language and authority.
+- [ ] Confirm the assignee closing-professional workflow.
+- [ ] Confirm contract formatting, notices, cancellation forms, and retention.
+- [ ] Confirm the required treatment of assignments, double closings,
+      referrals, and recurring activity before and after January 1, 2027.
+- [ ] Identify every situation requiring specialist review.
 
-- [M.G.L. c. 112, § 87PP — broker definition](https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section87PP)
-- [M.G.L. c. 112, § 87QQ — exemptions](https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section87QQ)
-- [M.G.L. c. 112, § 87RR — unlicensed activity](https://malegislature.gov/Laws/GeneralLaws/PartI/TitleXVI/Chapter112/Section87RR)
-- [Rhode Island Public Law 2026, chapter 410](https://webserver.rilegislature.gov/PublicLaws/law26/law26410.htm)
-- [Massachusetts Do Not Call guidance](https://www.mass.gov/info-details/do-not-call-registry-for-residents-and-businesses)
-- [201 CMR 12.00](https://www.mass.gov/regulations/201-CMR-1200-massachusetts-do-not-call-registry)
-- [Rhode Island Telephone Sales Solicitation Act](https://webserver.rilegislature.gov/Statutes/TITLE5/5-61/INDEX.htm)
-- [Rhode Island Attorney General registration resources](https://riag.ri.gov/about-our-office/divisions-and-units/civil-division/public-protection/consumer-protection-0)
-- [FTC Telemarketing Sales Rule](https://www.ftc.gov/legal-library/browse/rules/telemarketing-sales-rule)
-- [FCC robocall and robotext guidance](https://www.fcc.gov/consumers/guides/stop-unwanted-robocalls-and-texts)
+For proposed telephone solicitation, review
+[R.I. Gen. Laws § 5-61-3](https://webserver.rilegislature.gov/Statutes/TITLE5/5-61/5-61-3.HTM),
+the
+[Rhode Island Attorney General registration page](https://riag.ri.gov/about-our-office/divisions-and-units/civil-division/public-protection/consumer-protection-0),
+the definitions/exemptions in
+[§ 5-61-2](https://webserver.rilegislature.gov/Statutes/TITLE5/5-61/5-61-2.HTM),
+and the hours provision in
+[§ 5-61-3.6](https://webserver.rilegislature.gov/Statutes/TITLE5/5-61/5-61-3.6.htm).
 
-## 9. Sign-off record
+- [ ] Determine coverage, registration, exemptions, hours, scripts, identity,
+      recordkeeping, call recording, and suppression for the exact pilot.
 
-Do not fill these fields with assumed names.
+Before a server stores personal data, review the
+[Rhode Island Data Transparency and Privacy Protection Act](https://webserver.rilegislature.gov/Statutes/TITLE6/6-48.1/6-48.1-2.htm)
+for applicability, exemptions, notice, retention, rights, and vendor duties.
 
-- Massachusetts attorney / date / scope: ______________________________
-- Rhode Island attorney / date / scope: _______________________________
-- Closing professional(s) / date / scope: _____________________________
-- Privacy/security reviewer / date / scope: ___________________________
-- Approved campaign, template, and version: ___________________________
-- Next mandatory legal review date: __________________________________
+## Federal outreach review
 
+The
+[FTC Telemarketing Sales Rule guidance](https://www.ftc.gov/business-guidance/resources/complying-telemarketing-sales-rule)
+is the product baseline for National and entity-specific Do Not Call,
+list-freshness, calling-time, established-business-relationship,
+written-permission, prerecorded-message, caller-identification, and
+recordkeeping questions.
+
+[FCC DA 25-312](https://docs.fcc.gov/public/attachments/DA-25-312A1_Rcd.pdf)
+is the baseline source for TCPA consent/revocation questions and the documented
+April 11, 2025 and April 11, 2026 timing discussed in that order. Counsel must
+verify the rules in force for the exact proposed call or text.
+
+- [ ] Is the proposed contact covered by federal telemarketing rules?
+- [ ] What consent or other legal basis must be recorded per recipient?
+- [ ] Which National, state, and company-specific suppression checks are
+      required immediately before action?
+- [ ] Which opt-out words and revocation methods must be honored?
+- [ ] What quiet hours, frequency limits, caller identity, and disclosure
+      apply?
+- [ ] What records and evidence must be retained, and for how long?
+- [ ] Which provider registration, signed webhook, complaint, and kill-switch
+      controls must be tested?
+
+## Data, targeting, and vulnerable-party review
+
+- [ ] Source rights permit storage, qualification, and the intended use.
+- [ ] No protected or highly sensitive characteristic is collected, inferred,
+      scored, or used for neighborhood selection.
+- [ ] Public-record access is not assumed to grant marketing permission.
+- [ ] Contact data is kept separate from property qualification and has its own
+      provenance, confidence, consent, restriction, and suppression record.
+- [ ] Privacy notice, retention, export, deletion, incident, and vendor terms
+      are approved before server-side personal-data processing.
+- [ ] Distress, confusion, incapacity, foreclosure, bankruptcy, probate
+      conflict, identity/authority dispute, complaint, or attorney request stops
+      persuasive automation and routes to specialist review.
+
+## Scoped approval record
+
+Do not reduce professional review to a generic checkbox. Record:
+
+- attorney/reviewer name, firm, jurisdiction, and bar-status verification date;
+- scope and exact documents/templates/disclosures reviewed;
+- approved markets, strategies, channels, and source types;
+- required modifications and restrictions;
+- effective date and review-expiration date; and
+- signed review reference.
+
+Unknown fields remain incomplete. A review for one market, version, source, or
+channel does not authorize a materially different action.

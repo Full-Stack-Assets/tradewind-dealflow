@@ -104,7 +104,10 @@ export function QualificationPanel({ deal }: { deal: DealRecord }) {
   };
 
   return (
-    <article className="qualification-card">
+    <article
+      className="qualification-card"
+      id={`property-${deal.id}`}
+    >
       <header className="qualification-heading">
         <div>
           <span className="mini-label">

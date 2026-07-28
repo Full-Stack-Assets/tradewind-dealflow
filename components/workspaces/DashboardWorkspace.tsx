@@ -1,324 +1,337 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
 
 import { useLocalData } from "@/components/LocalDataProvider";
 import {
-  EmptyState,
   LocalDataNotice,
   StatusPill,
   WorkspaceHeader,
 } from "@/components/WorkspaceShell";
-import { curriculumModules, executionWeeks } from "@/lib/content";
-import { statePathSummary } from "@/lib/compliance";
-import type { ParticipationPath, StateCode } from "@/lib/types";
+import { buildLeadOperatingSnapshot } from "@/lib/dashboard";
+import type { LaunchQualificationStatus } from "@/lib/launch-qualification";
 
-const readinessItems = [
-  "State lane selected",
-  "Participation role recorded",
-  "Attorney interview scheduled",
-  "Authorized research sources documented",
-  "Written buy box complete",
-  "Buyer verification process ready",
-] as const;
+const LAUNCH_STATUSES: LaunchQualificationStatus[] = [
+  "Qualified",
+  "Possible",
+  "Research required",
+  "Disqualified",
+  "Compliance or specialist review",
+];
 
 export function DashboardWorkspace() {
-  const { data, updateData, writesSupported } = useLocalData();
-  const completedModules = curriculumModules.filter(
-    (module) => data.curriculum[module.id],
-  ).length;
-  const completedWeeks = executionWeeks.filter(
-    (_, index) => data.weekProgress[`week-${index + 1}`],
-  ).length;
-  const readinessDone = readinessItems.filter(
-    (item) => data.readinessChecks[item],
-  ).length;
-  const pipelineValue = data.deals.reduce(
-    (sum, deal) => sum + (deal.askingPrice ?? 0),
-    0,
+  const {
+    data,
+    hydrated,
+    storageStatus,
+    storageMessage,
+    writesSupported,
+  } = useLocalData();
+  const snapshot = useMemo(
+    () => buildLeadOperatingSnapshot(data, new Date()),
+    [data],
   );
-  const nextModule = curriculumModules.find(
-    (module) => !data.curriculum[module.id],
-  );
-
-  const setPreference = (
-    key: "selectedState" | "participationPath",
-    value: StateCode | ParticipationPath | null,
-  ) => {
-    void updateData((current) => ({
-      ...current,
-      preferences: { ...current.preferences, [key]: value },
-    }));
-  };
+  const configuredMarkets = data.buyBox.states.map((state) => {
+    const markets = data.buyBox.marketsByState[state];
+    return `${state}: ${markets.length > 0 ? markets.join(", ") : "No county selected"}`;
+  });
 
   return (
     <>
       <WorkspaceHeader
-        eyebrow="Command center"
-        title="DealFlow dashboard"
-        description="A truthful view of readiness, learning, and the records you have entered yourself."
+        eyebrow="Milestone 1 · Lead engine"
+        title="Current operating snapshot"
+        description="A present-state view of authorized records, qualification, research priorities, and hard blocks in this browser."
         action={
-          <Link className="button button-primary" href="/deal-lab">
-            Open Deal Lab
+          <Link className="button button-primary" href="/pipeline">
+            Open lead engine
           </Link>
         }
       />
       <LocalDataNotice />
 
-      <section className="setup-panel" aria-labelledby="setup-title">
-        <div className="setup-copy">
-          <span className="section-index">01 · SELECT YOUR LANE</span>
-          <h2 id="setup-title">Start with capacity, then activity.</h2>
-          <p>
-            This selection does not determine legal status. It makes the correct
-            warnings visible while you obtain state-specific advice.
-          </p>
-        </div>
-        <div className="lane-controls">
-          <fieldset>
-            <legend>Primary state</legend>
-            <div className="segmented">
-              {(["MA", "RI"] as const).map((state) => (
-                <button
-                  className={
-                    data.preferences.selectedState === state ? "selected" : ""
-                  }
-                  type="button"
-                  disabled={!writesSupported}
-                  key={state}
-                  aria-pressed={data.preferences.selectedState === state}
-                  onClick={() => setPreference("selectedState", state)}
-                >
-                  <strong>{state}</strong>
-                  <span>
-                    {state === "MA" ? "Massachusetts" : "Rhode Island"}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </fieldset>
-          <fieldset>
-            <legend>Participation path</legend>
-            <div className="segmented path-segmented">
-              <button
-                type="button"
-                disabled={!writesSupported}
-                className={
-                  data.preferences.participationPath === "principal"
-                    ? "selected"
-                    : ""
-                }
-                aria-pressed={
-                  data.preferences.participationPath === "principal"
-                }
-                onClick={() => setPreference("participationPath", "principal")}
-              >
-                <strong>Principal</strong>
-                <span>Acting for yourself</span>
-              </button>
-              <button
-                type="button"
-                disabled={!writesSupported}
-                className={
-                  data.preferences.participationPath === "licensed"
-                    ? "selected"
-                    : ""
-                }
-                aria-pressed={
-                  data.preferences.participationPath === "licensed"
-                }
-                onClick={() => setPreference("participationPath", "licensed")}
-              >
-                <strong>Licensed</strong>
-                <span>Supervised pathway</span>
-              </button>
-            </div>
-          </fieldset>
-        </div>
-        <div className="lane-summary">
-          <StatusPill
-            tone={
-              data.preferences.selectedState &&
-              data.preferences.participationPath
-                ? "warning"
-                : "blocked"
-            }
-          >
-            {data.preferences.selectedState &&
-            data.preferences.participationPath
-              ? "Path recorded"
-              : "Setup incomplete"}
+      <aside className="snapshot-boundary">
+        <strong>Current snapshot—not an activity-history report.</strong>
+        <p>
+          The local schema does not retain historical audit events. Full
+          event-by-event audit reporting remains in the deferred server-backed
+          backlog.
+        </p>
+      </aside>
+
+      <section className="panel" aria-labelledby="configuration-title">
+        <div className="panel-heading">
+          <div>
+            <span className="mini-label">What is configured?</span>
+            <h2 id="configuration-title">Active buy box</h2>
+          </div>
+          <StatusPill tone={snapshot.buyBox.configured ? "good" : "blocked"}>
+            {snapshot.buyBox.configured
+              ? `Active · version ${snapshot.buyBox.version}`
+              : "Configuration required"}
           </StatusPill>
-          <p>
-            {statePathSummary(
-              data.preferences.selectedState,
-              data.preferences.participationPath,
-            )}
-          </p>
-          <Link href="/compliance">Open state decision guide →</Link>
         </div>
+        <div className="configuration-summary-grid">
+          <div>
+            <span>Launch markets</span>
+            <strong>
+              {configuredMarkets.length > 0
+                ? configuredMarkets.join(" · ")
+                : "Not configured"}
+            </strong>
+          </div>
+          <div>
+            <span>Property types</span>
+            <strong>
+              {data.buyBox.propertyTypes.length > 0
+                ? data.buyBox.propertyTypes.join(", ")
+                : "Not configured"}
+            </strong>
+          </div>
+          <div>
+            <span>Source evidence gate</span>
+            <strong>
+              {data.buyBox.minimumConfidence} confidence ·{" "}
+              {data.buyBox.maxVerificationAgeDays} days maximum age
+            </strong>
+          </div>
+        </div>
+        <Link className="text-link" href="/pipeline#buy-box-title">
+          Review or create a buy-box version →
+        </Link>
       </section>
 
-      <section className="metric-grid" aria-label="Workspace totals">
-        <article>
-          <span className="metric-icon sea" aria-hidden="true">
-            ↗
-          </span>
-          <span>Property records</span>
-          <strong>{data.deals.length}</strong>
-          <small>User-entered only</small>
-        </article>
-        <article>
-          <span className="metric-icon teal" aria-hidden="true">
-            ◎
-          </span>
-          <span>Buyer profiles</span>
-          <strong>{data.buyers.length}</strong>
-          <small>Verification required</small>
-        </article>
-        <article>
-          <span className="metric-icon sand" aria-hidden="true">
-            ◇
-          </span>
-          <span>Saved analyses</span>
-          <strong>{data.analyses.length}</strong>
-          <small>Input-based estimates</small>
-        </article>
-        <article>
-          <span className="metric-icon coral" aria-hidden="true">
-            $
-          </span>
-          <span>Recorded asking total</span>
-          <strong>
-            {pipelineValue === 0
-              ? "—"
-              : new Intl.NumberFormat("en-US", {
-                  style: "currency",
-                  currency: "USD",
-                  maximumFractionDigits: 0,
-                  notation: "compact",
-                }).format(pipelineValue)}
-          </strong>
-          <small>Not pipeline value or revenue</small>
-        </article>
+      <section aria-labelledby="qualification-counts-title">
+        <div className="section-heading-row">
+          <div>
+            <span className="mini-label">Current property records</span>
+            <h2 id="qualification-counts-title">
+              Qualification by launch category
+            </h2>
+          </div>
+          <p>
+            {snapshot.importedPropertyCount} imported of{" "}
+            {snapshot.propertyRecordCount} total property records
+          </p>
+        </div>
+        <dl className="qualification-count-grid">
+          {LAUNCH_STATUSES.map((status) => (
+            <div key={status}>
+              <dt>{status}</dt>
+              <dd>{snapshot.qualificationCounts[status]}</dd>
+            </div>
+          ))}
+        </dl>
       </section>
 
       <div className="dashboard-columns">
-        <section className="panel progress-panel" aria-labelledby="progress-title">
+        <section className="panel" aria-labelledby="data-gaps-title">
           <div className="panel-heading">
             <div>
-              <span className="mini-label">90-day field plan</span>
-              <h2 id="progress-title">Execution progress</h2>
+              <span className="mini-label">Evidence health</span>
+              <h2 id="data-gaps-title">Missing or unknown facts</h2>
             </div>
-            <strong className="progress-number">
-              {Math.round((completedWeeks / executionWeeks.length) * 100)}%
-            </strong>
           </div>
-          <div
-            className="progress-track"
-            role="progressbar"
-            aria-valuemin={0}
-            aria-valuemax={executionWeeks.length}
-            aria-valuenow={completedWeeks}
-            aria-label={`${completedWeeks} of ${executionWeeks.length} weeks complete`}
-          >
-            <span
-              style={{
-                width: `${(completedWeeks / executionWeeks.length) * 100}%`,
-              }}
-            />
-          </div>
-          <div className="progress-meta">
-            <span>{completedWeeks} of 13 weeks</span>
-            <span>{completedModules} of 12 modules</span>
-          </div>
-          <div className="next-action-card">
-            <span className="next-arrow" aria-hidden="true">
-              →
-            </span>
+          <dl className="compact-count-list">
             <div>
-              <small>Next recommended lesson</small>
-              <strong>
-                {nextModule?.title ?? "Review and document your next cycle"}
-              </strong>
+              <dt>Missing provenance</dt>
+              <dd>{snapshot.dataGaps.missingProvenanceRecords}</dd>
             </div>
-          </div>
-          <Link className="text-link" href="/academy">
-            Continue in Academy →
-          </Link>
+            <div>
+              <dt>Unknown source confidence</dt>
+              <dd>{snapshot.dataGaps.unknownConfidenceRecords}</dd>
+            </div>
+            <div>
+              <dt>Missing verification date</dt>
+              <dd>{snapshot.dataGaps.missingVerificationRecords}</dd>
+            </div>
+          </dl>
+          <p className="muted-copy">
+            Unknown evidence remains unknown. It is never converted to zero or
+            treated as verified.
+          </p>
         </section>
 
-        <section className="panel" aria-labelledby="readiness-title">
+        <section className="panel" aria-labelledby="blocked-title">
           <div className="panel-heading">
             <div>
-              <span className="mini-label">Operator readiness</span>
-              <h2 id="readiness-title">Before lead activity</h2>
+              <span className="mini-label">What is blocked?</span>
+              <h2 id="blocked-title">Blocked and remediation</h2>
             </div>
-            <StatusPill
-              tone={readinessDone === readinessItems.length ? "good" : "warning"}
-            >
-              {readinessDone}/{readinessItems.length}
-            </StatusPill>
           </div>
-          <div className="check-list">
-            {readinessItems.map((item) => (
-              <label className="check-row" key={item}>
-                <input
-                  type="checkbox"
-                  disabled={!writesSupported}
-                  checked={Boolean(data.readinessChecks[item])}
-                  onChange={(event) =>
-                    void updateData((current) => ({
-                      ...current,
-                      readinessChecks: {
-                        ...current.readinessChecks,
-                        [item]: event.target.checked,
-                      },
-                    }))
-                  }
-                />
-                <span>
-                  <strong>{item}</strong>
-                  <small>
-                    {item.includes("Attorney")
-                      ? "Record scheduling only; this is not legal approval."
-                      : "Operator-confirmed checklist item"}
-                  </small>
-                </span>
-              </label>
-            ))}
-          </div>
+          <dl className="compact-count-list">
+            <div>
+              <dt>Contact blocked</dt>
+              <dd>{snapshot.blocked.contactBlockedRecords}</dd>
+            </div>
+            <div>
+              <dt>Compliance or specialist review</dt>
+              <dd>{snapshot.blocked.complianceReviewRecords}</dd>
+            </div>
+            <div>
+              <dt>Unresolved fact conflicts</dt>
+              <dd>{snapshot.integrity.unresolvedConflicts}</dd>
+            </div>
+            <div>
+              <dt>Active restrictions</dt>
+              <dd>{snapshot.integrity.activeRestrictions}</dd>
+            </div>
+            <div>
+              <dt>Records needing research or remediation</dt>
+              <dd>{snapshot.integrity.recordsNeedingRemediation}</dd>
+            </div>
+          </dl>
+          <p className="muted-copy">
+            Every imported record remains blocked from contact in this
+            milestone. A score never authorizes outreach or transaction action.
+          </p>
         </section>
       </div>
 
-      {data.deals.length === 0 && (
-        <section className="panel">
-          <EmptyState
-            title="No property records yet"
-            action={
-              <Link className="button button-primary button-small" href="/pipeline">
-                Add your first real lead
-              </Link>
-            }
-          >
-            The production workspace starts empty by design. Add only a record
-            you collected lawfully or received from an authorized source.
-          </EmptyState>
-        </section>
-      )}
-
-      <aside className="ri-alert">
-        <span className="alert-date">JAN 01 · 2027</span>
-        <div>
-          <strong>Rhode Island transition remains on the radar.</strong>
-          <p>
-            Public Law 2026, chapter 410 changes recurring equitable-interest
-            wholesaling requirements. The RI workflow uses heightened controls
-            now and requires Rhode Island counsel.
-          </p>
+      <section className="panel" aria-labelledby="research-queue-title">
+        <div className="panel-heading">
+          <div>
+            <span className="mini-label">
+              Which records deserve research attention?
+            </span>
+            <h2 id="research-queue-title">Prioritized research queue</h2>
+          </div>
+          <span className="queue-count">
+            {snapshot.researchItems.length > 0
+              ? `${snapshot.researchItems.length} highest-priority records`
+              : "Not enough data"}
+          </span>
         </div>
-        <Link href="/compliance">Review RI lane →</Link>
+
+        {snapshot.researchItems.length > 0 ? (
+          <ol className="research-queue-list">
+            {snapshot.researchItems.map((item) => (
+              <li key={item.dealId}>
+                <div className="research-priority">
+                  <strong>{item.priorityScore}</strong>
+                  <span>{item.priorityLabel}</span>
+                </div>
+                <div className="research-record">
+                  <span className="mini-label">{item.qualificationStatus}</span>
+                  <h3>
+                    <Link href={item.href}>{item.address}</Link>
+                  </h3>
+                  <p>{item.location}</p>
+                  <strong>{item.taskType}</strong>
+                  <p>{item.reason}</p>
+                  <small>
+                    {item.qualificationScoreLabel}:{" "}
+                    {item.qualificationScore ?? "Not enough data"} · Research
+                    priority is not predicted transaction value.
+                  </small>
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <div className="empty-workflow">
+            <span className="mini-label">Shortest real workflow</span>
+            <h3>No authorized property records are available to rank.</h3>
+            <p>
+              Strongest supported preliminary priority: Not enough data. Start
+              with one real source and keep every review local.
+            </p>
+            <ol>
+              <li>
+                <Link href="/pipeline#buy-box-title">
+                  Configure the launch buy box
+                </Link>
+                .
+              </li>
+              <li>
+                <Link href="/pipeline#csv-import-title">
+                  Download the blank property CSV template
+                </Link>
+                .
+              </li>
+              <li>Select one authorized source file.</li>
+              <li>Review the local preview and every hold or conflict.</li>
+              <li>Apply safe records only after the preview is correct.</li>
+            </ol>
+          </div>
+        )}
+      </section>
+
+      <section className="panel" aria-labelledby="system-health-title">
+        <div className="panel-heading">
+          <div>
+            <span className="mini-label">Can the local system operate?</span>
+            <h2 id="system-health-title">System and local storage</h2>
+          </div>
+          <StatusPill tone={storageTone(storageStatus)}>
+            {storageLabel(storageStatus)}
+          </StatusPill>
+        </div>
+        <dl className="system-health-grid">
+          <div>
+            <dt>Browser snapshot</dt>
+            <dd>
+              {hydrated
+                ? "Current browser storage inspected"
+                : "Loading the current browser snapshot"}
+            </dd>
+          </div>
+          <div>
+            <dt>Safe local writes</dt>
+            <dd>
+              {writesSupported
+                ? "Serialized writes available"
+                : "Unavailable · read and export only"}
+            </dd>
+          </div>
+          <div>
+            <dt>Release health</dt>
+            <dd>
+              Local-first · outreach disabled ·{" "}
+              <Link href="/healthz">open health endpoint</Link>
+            </dd>
+          </div>
+        </dl>
+        {storageMessage && <p className="muted-copy">{storageMessage}</p>}
+      </section>
+
+      <aside className="action-boundary">
+        <strong>What should happen next?</strong>
+        <p>
+          Work the first research item, update only evidence you can source,
+          then review the recalculated result in Pipeline. First contact,
+          offers, contracts, public marketing, sensitive sharing, buyer
+          selection, money, and closing instructions remain manual or
+          human-gated.
+        </p>
       </aside>
     </>
   );
+}
+
+function storageLabel(status: string): string {
+  if (status === "current") return "Current workspace";
+  if (status === "empty") return "Empty workspace";
+  if (status === "legacy") return "Legacy workspace";
+  if (status === "recovered-legacy") return "Legacy recovery";
+  if (status === "unsupported-lock") return "Read/export only";
+  return "Attention required";
+}
+
+function storageTone(
+  status: string,
+): "good" | "warning" | "blocked" | "neutral" {
+  if (status === "current" || status === "empty") return "good";
+  if (status === "legacy" || status === "recovered-legacy") return "warning";
+  if (
+    status === "corrupt"
+    || status === "invalid"
+    || status === "too-large"
+    || status === "quota"
+    || status === "unavailable"
+  ) {
+    return "blocked";
+  }
+  return "neutral";
 }

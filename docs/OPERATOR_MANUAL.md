@@ -1,182 +1,152 @@
 # Tradewind DealFlow Operator Manual
 
-Release: local-first Phase 1  
-Baseline date: July 27, 2026
+Release: local-first lead engine
 
-## 1. Know the boundary
+Operating baseline: July 28, 2026
 
-Tradewind DealFlow is an educational and operating workspace. In this release:
+## Safety boundary
 
-- every property, seller-contact status, buyer, price, source, and note comes
-  from the operator;
-- records remain in the current browser’s local storage;
-- no outreach, submission, contract, payment, or provider action is sent;
-- checkmarks record an operator assertion; they are not third-party
-  verification;
-- a score, calculator result, or checklist is not legal advice, an appraisal,
-  an offer, or a closing commitment.
+The current release prepares and prioritizes research. It does not send a
+telephone call, text, email, direct-mail order, offer, contract, public
+marketing item, sensitive disclosure, payment, or closing instruction.
 
-Use the app only with real information that was directly submitted, lawfully
-researched, or obtained under an authorized data license. Do not enter protected
-characteristics or use them to select owners or neighborhoods.
+Use only real records from a lawful public source, a properly licensed source,
+an authorized CRM, a direct submission, or the operator’s permitted research.
+Do not enter protected characteristics or use them to prioritize people or
+neighborhoods. A property indicator is not seller motivation or permission to
+contact anyone.
 
-## 2. First session
+## Shortest usable workflow
 
-1. Open **Dashboard**.
-2. Select Massachusetts or Rhode Island.
-3. Record whether the working path is bona fide principal activity or a
-   licensed and supervised path.
-4. Read the state warning shown for that selection.
-5. Open **Compliance** and review the dated sources.
-6. Export a JSON backup after the first useful configuration is saved.
+1. Open **Pipeline** and review the active launch buy box.
+2. Download the blank CSV template.
+3. Fill it with records from one authorized source and preserve the
+   source-provided identifiers.
+4. Select the file. It remains in the browser.
+5. Review every validation error, duplicate, changed snapshot, possible
+   property match, source restriction, and potential conflict.
+6. Attach a possible match only when the listed property identity is reliable;
+   otherwise hold it outside production.
+7. Apply safe records. Every new property enters `Research`.
+8. Open **Dashboard** and work the highest-priority research item.
+9. Return to **Pipeline**, review the property’s qualification and provenance,
+   and record only evidence-backed conflict or restriction decisions.
+10. Export a JSON backup after meaningful changes.
 
-The state and role controls are decision aids. A Massachusetts or Rhode Island
-real-estate attorney must confirm the actual activity and documents.
+## Configure the launch buy box
 
-## 3. Add a property
+The launch form is deliberately narrow:
 
-In **Pipeline**, choose **Add property** and enter only a real, lawfully sourced
-record. Required provenance in this release is the source description entered
-by the operator. Record enough detail to re-check the source and its currency.
+- Bristol County, Massachusetts;
+- Providence County, Rhode Island;
+- single-family, duplex, triplex, and four-unit residential properties.
 
-Pipeline stages are:
+The form may narrow the active states but cannot expand beyond those launch
+counties or property types. A material save creates a new version. An
+equivalent save retains the current version and timestamp.
 
-`Research → Qualified → Contact Approved → Conversation → Offer → Contract →
-Disposition → Closing → Closed`
+The default financial thresholds are configuration and qualification inputs,
+not an offer formula or legal approval. Review
+[Scoring and underwriting](SCORING_AND_UNDERWRITING.md) before interpreting a
+result.
 
-`Archived` is available for records that should leave the active workflow.
-“Contact Approved” is a tracking stage; it does not activate or legally approve
-contact.
+## Review an import
 
-Before changing a record to a contact or disposition stage, review the
-Compliance workspace and applicable counsel guidance. This release cannot send
-the contact.
+Use the preview as the current import report:
 
-## 4. Analyze a deal
+- **Safe new records** create new `Research` properties.
+- **Changed source snapshots** append a new source record and preserve
+  contradictory facts for review.
+- **Exact unchanged reimports** write nothing.
+- **Same-file duplicates** write nothing.
+- **Possible property matches** must be attached to one listed property or
+  held outside production.
+- **Held/rejected rows** never enter the workspace.
+- **Restricted-source rows** preserve a source-derived contact block.
 
-In **Deal Lab**:
+`Apply safe records` remains disabled when no safe row exists, a possible
+match is unresolved, the preview is stale, storage is corrupt, or Web Locks
+are unavailable. See [Data import](DATA_IMPORT.md) for the exact contract.
 
-1. Link an existing property or type a real property label.
-2. Select the state.
-3. Enter ARV, repairs, holding/closing costs, buyer profit, and fee from
-   evidence you can explain.
-4. Record comparable-selection evidence and repair evidence.
-5. Record uncertainties and risks.
-6. Compare the primary MAO result with the percentage-rule heuristic.
-7. Save the analysis locally or export a text summary.
+## Work the Dashboard
 
-The primary calculation is:
+The Dashboard is a current operating snapshot. It answers:
 
-`MAO = ARV - Repairs - Holding/Closing Costs - Buyer Profit - Wholesale Fee`
+- which buy-box version is active;
+- how many real records are in each launch qualification category;
+- which records lack provenance, confidence, or verification;
+- which conflicts, restrictions, and contact blocks are active;
+- which research tasks have the highest current Task 5 priority; and
+- whether local storage can be written safely.
 
-The secondary percentage result is visibly labeled as a heuristic. Neither
-result is an appraisal or authority to issue an offer. Do not save an analysis
-until the evidence gate is complete.
+It is not a historical daily report. The local schema does not retain an event
+ledger, import batches, prior score results, or “what changed” history.
 
-## 5. Add and match a buyer
+## Review a property
 
-In **Buyers**, enter a buyer only from a real submission, authorized CRM record,
-or verified relationship. Record:
+Each Pipeline property shows:
 
-- state and exact markets;
-- property types and price range;
-- repair tolerance and strategies;
-- proof-of-funds status and expiration;
-- last verification date.
+- the five launch qualification categories;
+- the assessed-only preliminary score or `Unavailable`;
+- exact positive and negative reasons;
+- missing or unknown facts;
+- source freshness and confidence;
+- restrictions and disqualifiers;
+- contact status and reason;
+- the next derived research task;
+- source snapshots and usage rights; and
+- conflict and restriction history.
 
-Do not upload or paste statements, identity documents, or account numbers. The
-matching view compares a selected property with each recorded buy box and shows
-both reasons and conflicts. A match is not buyer interest, an offer, funding, or
-closing certainty.
+Resolve a fact conflict only after recording the evidence basis. Choosing the
+asserted value updates the canonical fact; choosing the canonical value leaves
+it in place. In either case, the source snapshot remains.
 
-## 6. Use the Academy
+Only operator- or migration-created restrictions can be resolved from the
+current control. The reason must contain a valid `YYYY-MM-DD` review date.
+Source-derived restrictions cannot be deleted or directly resolved there.
 
-Each of the twelve modules has a lesson summary, action, worksheet/tool,
-knowledge check, and measurable completion condition. Mark a module complete
-only after all five parts are satisfied. The 13-week tracker records execution,
-not an outcome guarantee.
+## Daily operating checklist
 
-## 7. Use the Compliance workspace
+- [ ] Check Dashboard storage health and active buy-box version.
+- [ ] Review contact blocks and compliance/specialist items first.
+- [ ] Work the highest research-priority property.
+- [ ] Verify ownership and property identity outside the app using authorized
+      sources.
+- [ ] Add no fact that cannot be sourced.
+- [ ] Resolve no conflict without a recorded evidence basis.
+- [ ] Treat unknowns as unknowns.
+- [ ] Initiate no contact based on a score.
+- [ ] Export a JSON backup after material changes.
+- [ ] Record legal or professional questions for the appropriate reviewer.
 
-Always keep Massachusetts and Rhode Island work separate.
+## Actions outside this milestone
 
-- **Massachusetts:** record principal or licensed participation, do not
-  negotiate for another for compensation without a confirmed licensed path,
-  and obtain state-counsel review before document execution or disposition.
-- **Rhode Island:** treat the January 1, 2027 transition as a permanent warning,
-  default recurring activity to licensed-path review, use heightened disclosure
-  controls, and track seller and assignee cancellation windows separately.
+Seller engagement, a defensible evidence-ranged underwriting case, verified
+buyer intake and matching, a unified Approval Queue, closing coordination, and
+realized economics are later fast-track milestones. Manual work outside the
+app remains subject to company policy, data rights, counsel review, and the
+human approval gates described in
+[Compliance review](COMPLIANCE_REVIEW_CHECKLIST.md).
 
-The Rhode Island tracker excludes weekends. It excludes holidays only when the
-operator records a verified calendar. Without that evidence it keeps readiness
-blocked until attorney confirmation.
+The existing local Deal Lab calculator is not an appraisal or the deferred
+underwriting engine. The existing Buyers workspace does not replace a
+documented buyer-verification process.
 
-The outreach checklist is planning-only. Checking every item does not turn on
-email, calls, texts, or direct mail.
+## Escalate instead of proceeding
 
-## 8. Prepare a Deal Desk packet
+Stop persuasive activity and seek specialist review when there is identity or
+ownership uncertainty, an ownership change, a source restriction, an opt-out,
+a complaint, attorney involvement, foreclosure, bankruptcy, probate
+complexity, incapacity, disputed authority, environmental/title risk, or a
+request for legal advice.
 
-The Deal Desk prepares a local text file; it does not submit it.
+Do not use the app to sign or send legal documents, bind a party, choose a
+final buyer, accept or transfer money, record a document, or issue closing
+instructions.
 
-1. Select a real property record.
-2. Identify the submitter and the structure requiring review.
-3. Summarize verified facts, seller priorities, assumptions, and open
-   questions.
-4. Complete every qualification check.
-5. Record consent to review.
-6. Export the packet.
-7. Share it manually only through an approved secure process.
+## Backup discipline
 
-Export does not create agency, representation, acceptance, financing,
-compensation, or a promise to acquire, fund, assign, partner on, or close a
-transaction.
-
-## 9. Daily operating rhythm
-
-Phase 1 is a human-run loop:
-
-1. Review state and compliance warnings.
-2. Add or update only authorized records.
-3. Verify source currency and ownership outside the app.
-4. Update next actions and pipeline stages.
-5. Analyze qualified opportunities.
-6. Review missing evidence and legal gates.
-7. Re-verify buyer criteria before relying on a match.
-8. Prepare review packets where appropriate.
-9. Export an end-of-day JSON backup after material changes.
-
-Automated ingestion, outreach, reply handling, and job scheduling belong to
-Phase 2 and remain disabled.
-
-## 10. Backup, restore, and deletion
-
-### Backup
-
-Use **Pipeline → Export JSON**. Give the file a date, store it in an encrypted
-location, and follow the organization’s retention policy. CSV is a
-pipeline-only convenience export and is not a full backup.
-
-### Restore
-
-Use **Pipeline → Import JSON**. The app rejects malformed or incompatible files
-before showing the replacement confirmation. Importing a valid file replaces
-the entire current browser workspace. Export the current data first.
-
-### Delete
-
-Individual property and buyer deletion requires confirmation. **Clear all local
-workspace data** removes the complete local workspace after confirmation.
-Deletion is limited to this browser; it cannot delete copies the operator
-previously exported.
-
-## 11. Escalate immediately
-
-Stop the workflow and obtain specialist review when a seller appears confused,
-incapacitated, under severe pressure, represented by counsel, in bankruptcy,
-foreclosure, or probate complexity, disputes identity or ownership, or asks for
-legal advice. Also stop on a complaint, opt-out, ownership change, uncertain
-contact identity, or contradictory source data.
-
-The application cannot sign contracts, bind a party, move funds, provide
-closing instructions, or make legal representations.
-
+Browser clearing, eviction, a damaged profile, device loss, or private-mode
+cleanup can erase local records. Use **Pipeline → Export JSON backup** after
+meaningful changes and follow
+[Backup and recovery](BACKUP_AND_RECOVERY.md).

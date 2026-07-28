@@ -1,64 +1,55 @@
 # Tradewind DealFlow
 
-Tradewind DealFlow is the local-first first release of the **New England
-Wholesale OS**: a sober education and operating workspace for beginning and
-early-stage real-estate wholesalers in Massachusetts and Rhode Island.
+Tradewind DealFlow is a local-first acquisition operations workspace for a
+narrow Massachusetts and Rhode Island launch. The current milestone is the
+lead engine: authorized property intake, source preservation, transparent
+qualification, and prioritized research.
 
-The release implements the approved “90-Day First-Deal Execution System” as a
-structured process, not a promise that a user will contract, assign, fund, or
-close a transaction in 90 days.
+The application starts with no properties, sellers, buyers, comparable sales,
+communications, approvals, revenue, or performance data. Test fixtures stay in
+the test process and are never loaded into the production workspace.
 
-## What is live
+## Implemented launch capability
 
-- Public product home with transparent pricing, limitations, and no fabricated
-  testimonials, properties, buyers, or performance claims
-- Dashboard with state lane, readiness, 90-day progress, and totals calculated
-  only from the user’s browser data
-- Deal Lab with the transparent primary formula:
-  `MAO = ARV - Repairs - Holding/Closing Costs - Buyer Profit - Wholesale Fee`
-- Pipeline for user-entered, lawfully sourced records, with guarded deletion,
-  full JSON backup/restore, and CSV export
-- Buyer workspace with real user-entered profiles and explainable matching
-- Twelve-module Academy and 13-week execution tracker
-- Separate Massachusetts and Rhode Island compliance lanes, dated official
-  sources, Rhode Island transition alert, cancellation-window tracking, and
-  marketing-interest readiness gate
-- Resource Center with official public research starting points
-- Deal Desk packet preparation and local export
-- Responsive, keyboard-accessible interface from 320 px through desktop
-- `/healthz` release-health endpoint
+An operator can:
 
-## Deliberate safety boundary
+- configure one versioned launch buy box for Bristol County, Massachusetts
+  and/or Providence County, Rhode Island;
+- download a blank property CSV template;
+- select an authorized CSV that is decoded, validated, and planned entirely in
+  the browser;
+- review invalid rows, exact reimports, same-file duplicates, possible property
+  matches, changed source snapshots, restrictions, and potential fact
+  conflicts before saving;
+- apply reviewed safe rows through one serialized local mutation;
+- inspect each property’s source record, usage rights, confidence, freshness,
+  conflicts, restrictions, qualification evidence, contact block, and next
+  research task;
+- see a current dashboard snapshot with five launch qualification categories
+  and the Task 5 research-priority order; and
+- export and restore the full versioned workspace as JSON.
 
-This release stores workspace records in `localStorage` on the user’s device.
-It has no project database, authentication, payment processing, analytics,
-seller or buyer messaging, property-data ingestion, legal-document execution,
-or provider mutation. No form transmits seller, buyer, property, or free-form
-deal data to a Tradewind backend.
+Every imported property begins in `Research`. No score authorizes contact,
+marketing, an offer, a contract, sensitive disclosure, final buyer selection,
+money, or closing instructions.
 
-Clearing browser storage can erase records. Export a JSON backup from
-**Pipeline → Export JSON** and store it securely. Imports are schema-validated
-and require confirmation before replacing the current workspace.
+## Deliberate boundary
 
-The product is educational and operational software. It is not legal, tax,
+Records are stored under the versioned browser key
+`tradewind-dealflow:v2`. There is no project database, login, multi-device
+sync, persistent event audit, server-side backup, provider connection, or
+outreach send in this milestone. Clearing browser storage can erase the only
+working copy.
+
+The existing Deal Lab and Buyers routes remain local educational utilities.
+They are not the deferred evidence-ranged underwriting case system or the
+verified-buyer intake and matching milestone. See
+[Known limitations and deferred backlog](docs/KNOWN_LIMITATIONS.md).
+
+Tradewind DealFlow is educational and operational software, not legal, tax,
 financial, brokerage, appraisal, or investment advice.
 
-## Routes
-
-| Route | Purpose |
-| --- | --- |
-| `/` | Public product and value ladder |
-| `/dashboard` | State lane, readiness, progress, and real-data totals |
-| `/deal-lab` | Evidence-backed analysis and export |
-| `/pipeline` | Local property records and backup controls |
-| `/buyers` | Local buyer CRM and explainable matching |
-| `/academy` | Twelve modules and 13-week tracker |
-| `/compliance` | State lanes, outreach checklist, and readiness gates |
-| `/resources` | Dated official and public research links |
-| `/deal-desk` | Qualification checklist and packet export |
-| `/healthz` | Machine-readable release health |
-
-## Local development
+## Run locally
 
 Requirements:
 
@@ -70,59 +61,46 @@ npm ci
 npm run dev
 ```
 
-Open `http://localhost:3000`. The application begins empty and never seeds
-production-looking records.
+Open `http://localhost:3000`. Use an isolated browser profile for test data.
+Do not enter real seller or buyer personal data into a public or shared test
+environment.
 
-## Verification
+## Verify
 
 ```bash
-npm test
+npm run test:unit
 npm run typecheck
 npm run lint
+npm run build
+npm run test:render
+git diff --check
 ```
 
-`npm test` runs deterministic calculation, import, compliance, business-day,
-and buyer-matching tests; builds the production worker; and verifies every
-route, the health contract, legal-source copy, empty states, and security
-headers.
+The milestone release gate, live browser checks, dependency review, exact
+commit promotion, and private production health verification are tracked in
+`docs/RELEASE_CHECKLIST.md`.
 
-## Data model and backups
+## Primary routes
 
-- Local schema version: `1`
-- Browser key: `tradewind-dealflow:v1`
-- Canonical backup: JSON exported by the application
-- Pipeline-only convenience export: CSV
-- Restore behavior: validate first, then show a destructive replacement
-  confirmation
-- Clear behavior: explicit confirmation, then deletion from that browser
+| Route | Current purpose |
+| --- | --- |
+| `/dashboard` | Current buy-box, qualification, research, block, and storage snapshot |
+| `/pipeline` | Buy-box configuration, local CSV preview/apply, provenance review, and backup |
+| `/compliance` | Educational state lanes and planning-only controls |
+| `/healthz` | Declares the local-first release and disabled outreach state |
 
-Do not place proof-of-funds files, identity documents, account numbers,
-medical information, or unnecessary distress details in local notes.
+Other existing routes are outside the fast-track Milestone 1 acceptance scope.
 
-## Deployment
+## Launch documentation
 
-The production target is OpenAI Sites. The exact committed source must be
-pushed before a Sites version is saved, and deployment must use that saved
-version. See [Deployment and domain operations](docs/DEPLOYMENT.md).
+1. [Setup and deployment](docs/DEPLOYMENT.md)
+2. [Operator manual](docs/OPERATOR_MANUAL.md)
+3. [Data-import guide](docs/DATA_IMPORT.md)
+4. [Scoring and underwriting boundary](docs/SCORING_AND_UNDERWRITING.md)
+5. [Compliance-review checklist](docs/COMPLIANCE_REVIEW_CHECKLIST.md)
+6. [Backup and recovery](docs/BACKUP_AND_RECOVERY.md)
+7. [Known limitations and deferred backlog](docs/KNOWN_LIMITATIONS.md)
 
-No domain or DNS record is changed by this repository. Use only the exact DNS
-target returned by the hosting provider.
-
-## Documentation
-
-- [Operator manual](docs/OPERATOR_MANUAL.md)
-- [Compliance review checklist](docs/COMPLIANCE_REVIEW_CHECKLIST.md)
-- [Security and privacy](docs/SECURITY_AND_PRIVACY.md)
-- [Deployment, domain, backup, and rollback](docs/DEPLOYMENT.md)
-- [Phase 2 production architecture](docs/PHASE_2_ARCHITECTURE.md)
-- [Release checklist](docs/RELEASE_CHECKLIST.md)
-
-## Deferred Phase 2
-
-Authenticated multi-device storage, managed PostgreSQL, real authorized-source
-ingestion, outreach providers, campaign automation, payment processing,
-executable legal forms, and provider-backed daily automation are architecture
-work—not implied features of this release. Their activation requires provider
-selection, credentials, data-use terms, security review, and Massachusetts /
-Rhode Island counsel approval. No missing production input is replaced with
-fabricated data.
+Existing architecture and security documents are historical references. The
+eight launch documents named in the Task 7 brief, including this README, are
+the current operating sources of truth.

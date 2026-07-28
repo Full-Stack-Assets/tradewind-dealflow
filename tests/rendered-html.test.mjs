@@ -58,7 +58,7 @@ test("public responses carry baseline browser security headers", async () => {
 });
 
 const routes = [
-  ["/dashboard", /DealFlow dashboard/i, /No property records yet/i],
+  ["/dashboard", /Current operating snapshot/i, /No authorized property records are available to rank/i],
   ["/deal-lab", /Deal Lab/i, /ARV - Repairs - Holding\/Closing Costs - Buyer Profit - Wholesale Fee/i],
   ["/pipeline", /Pipeline/i, /Your pipeline is empty/i],
   ["/buyers", /Buyer workspace/i, /No buyer profiles yet/i],
@@ -116,6 +116,29 @@ test("pipeline renders the local lead engine and hard action boundaries", async 
   assert.doesNotMatch(
     html,
     /Send campaign|Text owner|Email owner|Autodial|Upload property CSV/i,
+  );
+});
+
+test("dashboard renders the current lead operating snapshot without invented history", async () => {
+  const response = await render("/dashboard");
+  const html = await response.text();
+
+  assert.match(html, /Current operating snapshot/i);
+  assert.match(html, /Active buy box/i);
+  assert.match(html, /Qualification by launch category/i);
+  assert.match(html, /Prioritized research queue/i);
+  assert.match(html, /Blocked and remediation/i);
+  assert.match(html, /System and local storage/i);
+  assert.match(html, /Not enough data/i);
+  assert.match(html, /Configure the launch buy box/i);
+  assert.match(html, /Download the blank property CSV template/i);
+  assert.match(html, /Select one authorized source file/i);
+  assert.match(html, /Review the local preview/i);
+  assert.match(html, /Apply safe records/i);
+  assert.match(html, /does not retain historical audit events/i);
+  assert.doesNotMatch(
+    html,
+    /Projected revenue|Seller motivation|Recent seller activity|Approval rate|Last configuration change/i,
   );
 });
 
