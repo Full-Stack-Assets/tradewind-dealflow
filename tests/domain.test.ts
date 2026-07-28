@@ -72,25 +72,16 @@ test("new local data is configuration-only and contains no production records", 
   assert.deepEqual(empty.analyses, []);
   assert.equal(empty.preferences.selectedState, null);
   assert.equal(empty.preferences.participationPath, null);
-  assert.deepEqual(empty.buyBox, {
-    configured: false,
-    version: 0,
-    updatedAt: "2026-07-27T12:00:00.000Z",
-    states: [],
-    markets: [],
-    propertyTypes: [],
-    minPrice: null,
-    maxPrice: null,
-    rehabLevels: [],
-    minimumConfidence: "Medium",
-    maxVerificationAgeDays: 90,
-    weights: {
-      geography: 25,
-      propertyType: 20,
-      price: 15,
-      rehab: 15,
-      dataQuality: 25,
-    },
+  assert.equal(empty.buyBox.configured, true);
+  assert.equal(empty.buyBox.version, 1);
+  assert.deepEqual(empty.buyBox.states, ["MA", "RI"]);
+  assert.deepEqual(empty.buyBox.weights, {
+    propertyFit: 25,
+    financialFeasibility: 25,
+    marketability: 15,
+    buyerDemand: 15,
+    dataQuality: 10,
+    sellerProvidedFit: 10,
   });
 });
 

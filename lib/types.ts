@@ -140,12 +140,23 @@ export type BuyBoxConfig = {
   rehabLevels: RehabLevel[];
   minimumConfidence: DataConfidence;
   maxVerificationAgeDays: number;
+  financialThresholds: {
+    maximumEstimatedValue: number;
+    minimumEquityPercent: number;
+    preferredEquityPercent: number;
+    minimumAssignmentSpread: number;
+    preferredAssignmentSpread: number;
+    minimumBuyerProfit: number;
+    preferredBuyerProfit: number;
+    minimumWholesaleGrossMarginPercent: number;
+  };
   weights: {
-    geography: number;
-    propertyType: number;
-    price: number;
-    rehab: number;
+    propertyFit: number;
+    financialFeasibility: number;
+    marketability: number;
+    buyerDemand: number;
     dataQuality: number;
+    sellerProvidedFit: number;
   };
 };
 

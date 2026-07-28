@@ -22,6 +22,7 @@ import type {
   StateCode,
 } from "./types.ts";
 import { PIPELINE_STAGES } from "./types.ts";
+import { createDefaultBuyBox } from "./qualification.ts";
 
 const MAX_ARRAY_LENGTH = 500;
 const MAX_STRING_LENGTH = 10_000;
@@ -63,20 +64,7 @@ export function createEmptyData(now = new Date().toISOString()): DealFlowData {
     revision: 0,
     updatedAt: now,
     preferences: { selectedState: null, participationPath: null },
-    buyBox: {
-      configured: false,
-      version: 0,
-      updatedAt: now,
-      states: [],
-      markets: [],
-      propertyTypes: [],
-      minPrice: null,
-      maxPrice: null,
-      rehabLevels: [],
-      minimumConfidence: "Medium",
-      maxVerificationAgeDays: 90,
-      weights: { geography: 25, propertyType: 20, price: 15, rehab: 15, dataQuality: 25 },
-    },
+    buyBox: createDefaultBuyBox(now),
     deals: [], buyers: [], analyses: [], curriculum: {}, weekProgress: {}, readinessChecks: {},
     compliance: {
       sellerWindow: { startDate: "", verifiedHolidays: [], holidayCalendarVerified: false, attorneyConfirmed: false },
@@ -249,12 +237,48 @@ function reconstructDealDeskDraft(raw: unknown): DealDeskDraft | null {
 }
 
 function reconstructBuyBox(raw: unknown): BuyBoxConfig | null {
-  const fields = ["configured", "version", "updatedAt", "states", "markets", "propertyTypes", "minPrice", "maxPrice", "rehabLevels", "minimumConfidence", "maxVerificationAgeDays", "weights"];
-  if (!isRecord(raw) || !hasOnlyKeys(raw, fields) || typeof raw.configured !== "boolean" || !validNonnegativeInteger(raw.version) || !validString(raw.updatedAt) || !validArray(raw.states) || !raw.states.every(validState) || !validNullableNonnegativeNumber(raw.minPrice) || !validNullableNonnegativeNumber(raw.maxPrice) || !validArray(raw.rehabLevels) || !raw.rehabLevels.every(validRehab) || !validConfidence(raw.minimumConfidence) || !validNonnegativeInteger(raw.maxVerificationAgeDays) || !isRecord(raw.weights) || !hasOnlyKeys(raw.weights, ["geography", "propertyType", "price", "rehab", "dataQuality"]) || !validFiniteNumber(raw.weights.geography) || !validFiniteNumber(raw.weights.propertyType) || !validFiniteNumber(raw.weights.price) || !validFiniteNumber(raw.weights.rehab) || !validFiniteNumber(raw.weights.dataQuality)) return null;
+  const fields = ["configured", "version", "updatedAt", "states", "markets", "propertyTypes", "minPrice", "maxPrice", "rehabLevels", "minimumConfidence", "maxVerificationAgeDays", "financialThresholds", "weights"];
+  if (!isRecord(raw) || !hasOnlyKeys(raw, fields) || typeof raw.configured !== "boolean" || !validNonnegativeInteger(raw.version) || !validString(raw.updatedAt) || !validArray(raw.states) || !raw.states.every(validState) || !validNullableNonnegativeNumber(raw.minPrice) || !validNullableNonnegativeNumber(raw.maxPrice) || !validArray(raw.rehabLevels) || !raw.rehabLevels.every(validRehab) || !validConfidence(raw.minimumConfidence) || !validNonnegativeInteger(raw.maxVerificationAgeDays) || !isRecord(raw.weights)) return null;
   const markets = reconstructStringArray(raw.markets);
   const propertyTypes = reconstructStringArray(raw.propertyTypes);
   if (markets === null || propertyTypes === null) return null;
-  return { configured: raw.configured, version: raw.version, updatedAt: raw.updatedAt, states: raw.states.slice(), markets, propertyTypes, minPrice: raw.minPrice, maxPrice: raw.maxPrice, rehabLevels: raw.rehabLevels.slice(), minimumConfidence: raw.minimumConfidence, maxVerificationAgeDays: raw.maxVerificationAgeDays, weights: { geography: raw.weights.geography, propertyType: raw.weights.propertyType, price: raw.weights.price, rehab: raw.weights.rehab, dataQuality: raw.weights.dataQuality } };
+  const defaults = createDefaultBuyBox(raw.updatedAt);
+  const rawWeights = raw.weights as Record<string, unknown>;
+  const legacyWeightKeys = ["geography", "propertyType", "price", "rehab", "dataQuality"];
+  const currentWeightKeys = ["propertyFit", "financialFeasibility", "marketability", "buyerDemand", "dataQuality", "sellerProvidedFit"];
+  const legacyWeights = hasOnlyKeys(rawWeights, legacyWeightKeys) && legacyWeightKeys.every((key) => validFiniteNumber(rawWeights[key]));
+  const currentWeights = hasOnlyKeys(rawWeights, currentWeightKeys) && currentWeightKeys.every((key) => validFiniteNumber(rawWeights[key]));
+  if (!legacyWeights && !currentWeights) return null;
+  let financialThresholds = defaults.financialThresholds;
+  if (raw.financialThresholds !== undefined) {
+    const thresholdKeys = ["maximumEstimatedValue", "minimumEquityPercent", "preferredEquityPercent", "minimumAssignmentSpread", "preferredAssignmentSpread", "minimumBuyerProfit", "preferredBuyerProfit", "minimumWholesaleGrossMarginPercent"];
+    if (!isRecord(raw.financialThresholds)) return null;
+    const rawThresholds = raw.financialThresholds;
+    if (!hasOnlyKeys(rawThresholds, thresholdKeys) || !thresholdKeys.every((key) => validFiniteNumber(rawThresholds[key]))) return null;
+    financialThresholds = {
+      maximumEstimatedValue: raw.financialThresholds.maximumEstimatedValue as number,
+      minimumEquityPercent: raw.financialThresholds.minimumEquityPercent as number,
+      preferredEquityPercent: raw.financialThresholds.preferredEquityPercent as number,
+      minimumAssignmentSpread: raw.financialThresholds.minimumAssignmentSpread as number,
+      preferredAssignmentSpread: raw.financialThresholds.preferredAssignmentSpread as number,
+      minimumBuyerProfit: raw.financialThresholds.minimumBuyerProfit as number,
+      preferredBuyerProfit: raw.financialThresholds.preferredBuyerProfit as number,
+      minimumWholesaleGrossMarginPercent: raw.financialThresholds.minimumWholesaleGrossMarginPercent as number,
+    };
+  } else if (!legacyWeights) {
+    return null;
+  }
+  const weights = currentWeights
+    ? {
+        propertyFit: rawWeights.propertyFit as number,
+        financialFeasibility: rawWeights.financialFeasibility as number,
+        marketability: rawWeights.marketability as number,
+        buyerDemand: rawWeights.buyerDemand as number,
+        dataQuality: rawWeights.dataQuality as number,
+        sellerProvidedFit: rawWeights.sellerProvidedFit as number,
+      }
+    : defaults.weights;
+  return { configured: raw.configured, version: raw.version, updatedAt: raw.updatedAt, states: raw.states.slice(), markets, propertyTypes, minPrice: raw.minPrice, maxPrice: raw.maxPrice, rehabLevels: raw.rehabLevels.slice(), minimumConfidence: raw.minimumConfidence, maxVerificationAgeDays: raw.maxVerificationAgeDays, financialThresholds, weights };
 }
 
 function uniqueIds(items: { id: string }[]): boolean {
