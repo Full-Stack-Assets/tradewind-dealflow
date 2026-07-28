@@ -22,7 +22,10 @@ import type {
   StateCode,
 } from "./types.ts";
 import { PIPELINE_STAGES } from "./types.ts";
-import { createDefaultBuyBox } from "./qualification.ts";
+import {
+  createDefaultBuyBox,
+  normalizeBuyBox,
+} from "./qualification.ts";
 
 const MAX_ARRAY_LENGTH = 500;
 const MAX_STRING_LENGTH = 10_000;
@@ -40,6 +43,7 @@ const SOURCE_USAGE_CLASSIFICATIONS: SourceUsageClassification[] = [
   "Operator research", "Restricted — research only",
 ];
 const DATA_CONFIDENCES: DataConfidence[] = ["Low", "Medium", "High"];
+const STATES_FOR_IMPORT: StateCode[] = ["MA", "RI"];
 const RESTRICTION_CODES: ResearchRestrictionCode[] = [
   "Do not contact", "Identity disputed", "Ownership stale", "Source restricted",
   "Specialist review",
@@ -193,11 +197,37 @@ function reconstructDealV2(raw: unknown): DealRecord | null {
   const factConflicts = raw.factConflicts.map(reconstructFactConflict);
   const researchRestrictions = raw.researchRestrictions.map(reconstructResearchRestriction);
   if (sourceAssertions.some((item) => item === null) || factConflicts.some((item) => item === null) || researchRestrictions.some((item) => item === null)) return null;
+  const requiredRestriction = contactStatusRestrictionCode(raw.ownerContactStatus);
+  if (
+    requiredRestriction !== null
+    && !(researchRestrictions as ResearchRestriction[]).some(
+      ({ code, resolvedAt }) =>
+        code === requiredRestriction && resolvedAt === null,
+    )
+  ) return null;
   return {
     id: raw.id, createdAt: raw.createdAt, updatedAt: raw.updatedAt, state: raw.state, address: trimmed(raw.address), city: trimmed(raw.city), market: trimmed(raw.market), propertyType: trimmed(raw.propertyType), source: trimmed(raw.source), ownerContactStatus: trimmed(raw.ownerContactStatus), stage: raw.stage, nextAction: trimmed(raw.nextAction), notes: trimmed(raw.notes), askingPrice: raw.askingPrice, rehabLevel: raw.rehabLevel,
     sourceAssertions: sourceAssertions as SourceAssertion[], factConflicts: factConflicts as FactConflict[], researchRestrictions: researchRestrictions as ResearchRestriction[], strategies: raw.strategies.slice(),
     executedAgreement: raw.executedAgreement, equitableInterestRecorded: raw.equitableInterestRecorded, legalTitleDisclosureReady: raw.legalTitleDisclosureReady, attorneyReviewComplete: raw.attorneyReviewComplete,
   };
+}
+
+function contactStatusRestrictionCode(
+  value: string,
+): "Do not contact" | "Identity disputed" | null {
+  const normalized = value.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase();
+  const compact = normalized.replace(/[^\p{L}\p{N}]+/gu, "");
+  if (
+    compact.includes("donotcontact")
+    || compact.includes("optout")
+    || compact.includes("optedout")
+    || /\bdnc\b/u.test(normalized)
+  ) return "Do not contact";
+  if (
+    compact.includes("identitydisputed")
+    || compact.includes("identitydispute")
+  ) return "Identity disputed";
+  return null;
 }
 
 function reconstructBuyer(raw: unknown): BuyerRecord | null {
@@ -237,12 +267,30 @@ function reconstructDealDeskDraft(raw: unknown): DealDeskDraft | null {
 }
 
 function reconstructBuyBox(raw: unknown): BuyBoxConfig | null {
-  const fields = ["configured", "version", "updatedAt", "states", "markets", "propertyTypes", "minPrice", "maxPrice", "rehabLevels", "minimumConfidence", "maxVerificationAgeDays", "financialThresholds", "weights"];
+  const fields = ["configured", "version", "updatedAt", "states", "markets", "marketsByState", "propertyTypes", "minPrice", "maxPrice", "rehabLevels", "minimumConfidence", "maxVerificationAgeDays", "financialThresholds", "weights"];
   if (!isRecord(raw) || !hasOnlyKeys(raw, fields) || typeof raw.configured !== "boolean" || !validNonnegativeInteger(raw.version) || !validString(raw.updatedAt) || !validArray(raw.states) || !raw.states.every(validState) || !validNullableNonnegativeNumber(raw.minPrice) || !validNullableNonnegativeNumber(raw.maxPrice) || !validArray(raw.rehabLevels) || !raw.rehabLevels.every(validRehab) || !validConfidence(raw.minimumConfidence) || !validNonnegativeInteger(raw.maxVerificationAgeDays) || !isRecord(raw.weights)) return null;
-  const markets = reconstructStringArray(raw.markets);
   const propertyTypes = reconstructStringArray(raw.propertyTypes);
-  if (markets === null || propertyTypes === null) return null;
+  if (propertyTypes === null) return null;
   const defaults = createDefaultBuyBox(raw.updatedAt);
+  const hasCurrentMarkets = raw.marketsByState !== undefined && raw.markets === undefined;
+  const hasLegacyMarkets = raw.markets !== undefined && raw.marketsByState === undefined;
+  if (!hasCurrentMarkets && !hasLegacyMarkets) return null;
+  let marketsByState: BuyBoxConfig["marketsByState"];
+  if (hasCurrentMarkets) {
+    if (!isRecord(raw.marketsByState) || !hasOnlyKeys(raw.marketsByState, ["MA", "RI"])) return null;
+    const ma = reconstructStringArray(raw.marketsByState.MA);
+    const ri = reconstructStringArray(raw.marketsByState.RI);
+    if (ma === null || ri === null) return null;
+    marketsByState = { MA: ma, RI: ri };
+  } else {
+    const legacyMarkets = reconstructStringArray(raw.markets);
+    if (legacyMarkets === null) return null;
+    marketsByState = migrateLegacyMarketsByState(
+      legacyMarkets,
+      raw.states as StateCode[],
+      defaults,
+    );
+  }
   const rawWeights = raw.weights as Record<string, unknown>;
   const legacyWeightKeys = ["geography", "propertyType", "price", "rehab", "dataQuality"];
   const currentWeightKeys = ["propertyFit", "financialFeasibility", "marketability", "buyerDemand", "dataQuality", "sellerProvidedFit"];
@@ -268,7 +316,7 @@ function reconstructBuyBox(raw: unknown): BuyBoxConfig | null {
   } else if (!legacyWeights) {
     return null;
   }
-  const weights = currentWeights
+  const weights: BuyBoxConfig["weights"] = currentWeights
     ? {
         propertyFit: rawWeights.propertyFit as number,
         financialFeasibility: rawWeights.financialFeasibility as number,
@@ -278,7 +326,62 @@ function reconstructBuyBox(raw: unknown): BuyBoxConfig | null {
         sellerProvidedFit: rawWeights.sellerProvidedFit as number,
       }
     : defaults.weights;
-  return { configured: raw.configured, version: raw.version, updatedAt: raw.updatedAt, states: raw.states.slice(), markets, propertyTypes, minPrice: raw.minPrice, maxPrice: raw.maxPrice, rehabLevels: raw.rehabLevels.slice(), minimumConfidence: raw.minimumConfidence, maxVerificationAgeDays: raw.maxVerificationAgeDays, financialThresholds, weights };
+  const reconstructed: BuyBoxConfig = {
+    configured: raw.configured,
+    version: raw.version,
+    updatedAt: raw.updatedAt,
+    states: raw.states.slice(),
+    marketsByState,
+    propertyTypes,
+    minPrice: raw.minPrice,
+    maxPrice: raw.maxPrice,
+    rehabLevels: raw.rehabLevels.slice(),
+    minimumConfidence: raw.minimumConfidence,
+    maxVerificationAgeDays: raw.maxVerificationAgeDays,
+    financialThresholds,
+    weights,
+  };
+  if (currentWeights) {
+    const validation = normalizeBuyBox(
+      reconstructed,
+      reconstructed,
+      new Date(raw.updatedAt),
+    );
+    if (!validation.ok) return null;
+    return {
+      ...validation.value,
+      configured: reconstructed.configured,
+      version: reconstructed.version,
+      updatedAt: reconstructed.updatedAt,
+    };
+  }
+  return reconstructed;
+}
+
+function migrateLegacyMarketsByState(
+  markets: string[],
+  states: StateCode[],
+  defaults: BuyBoxConfig,
+): BuyBoxConfig["marketsByState"] {
+  const result: BuyBoxConfig["marketsByState"] = { MA: [], RI: [] };
+  const defaultSets = {
+    MA: new Set(defaults.marketsByState.MA),
+    RI: new Set(defaults.marketsByState.RI),
+  };
+  for (const rawMarket of markets) {
+    const market = rawMarket.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase();
+    let assigned = false;
+    for (const state of STATES_FOR_IMPORT) {
+      if (states.includes(state) && defaultSets[state].has(market)) {
+        result[state].push(market);
+        assigned = true;
+      }
+    }
+    if (!assigned && states.length === 1) result[states[0]].push(market);
+  }
+  result.MA = [...new Set(result.MA)].sort();
+  result.RI = [...new Set(result.RI)].sort();
+  return result;
 }
 
 function uniqueIds(items: { id: string }[]): boolean {

@@ -115,6 +115,96 @@ test("v2 validation strips no unknown data and rejects it instead", () => {
   });
 });
 
+test("v2 validation rejects contact holds that are not represented by an active structured restriction", () => {
+  for (const ownerContactStatus of [
+    "Owner opted out",
+    "Owner opt-out",
+    "OptOut",
+    "DNC",
+    "Identity-dispute",
+  ]) {
+    const candidate = createEmptyData("2026-07-27T12:00:00.000Z");
+    candidate.deals.push({
+      id: "unsafe-contact-state",
+      createdAt: "2026-07-27T12:00:00.000Z",
+      updatedAt: "2026-07-27T12:00:00.000Z",
+      state: "MA",
+      address: "10 Harbor Way",
+      city: "Boston",
+      market: "Boston",
+      propertyType: "Single-family homes",
+      source: "Municipal assessor",
+      ownerContactStatus,
+      stage: "Research",
+      nextAction: "Research only",
+      notes: "",
+      askingPrice: 250_000,
+      rehabLevel: "Light",
+      sourceAssertions: [],
+      factConflicts: [],
+      researchRestrictions: [],
+      strategies: [],
+      executedAgreement: false,
+      equitableInterestRecorded: false,
+      legalTitleDisclosureReady: false,
+      attorneyReviewComplete: false,
+    });
+
+    const result = validateImport(candidate);
+    assert.equal(result.ok, false, ownerContactStatus);
+  }
+});
+
+test("strict current buy-box imports reject invalid freshness, thresholds, and weights", () => {
+  const candidates = [
+    (data: ReturnType<typeof createEmptyData>) => {
+      data.buyBox.maxVerificationAgeDays = 0;
+    },
+    (data: ReturnType<typeof createEmptyData>) => {
+      data.buyBox.financialThresholds.preferredEquityPercent = 20;
+      data.buyBox.financialThresholds.minimumEquityPercent = 30;
+    },
+    (data: ReturnType<typeof createEmptyData>) => {
+      data.buyBox.weights.propertyFit = -1;
+    },
+    (data: ReturnType<typeof createEmptyData>) => {
+      for (const key of Object.keys(data.buyBox.weights) as Array<
+        keyof typeof data.buyBox.weights
+      >) {
+        data.buyBox.weights[key] = 0;
+      }
+    },
+  ];
+
+  for (const mutate of candidates) {
+    const candidate = createEmptyData("2026-07-27T12:00:00.000Z");
+    mutate(candidate);
+    assert.equal(validateImport(candidate).ok, false);
+  }
+});
+
+test("legacy global buy-box markets migrate only to known states without cross-state leakage", () => {
+  const candidate = createEmptyData("2026-07-27T12:00:00.000Z") as unknown as {
+    buyBox: Record<string, unknown>;
+  };
+  delete candidate.buyBox.marketsByState;
+  candidate.buyBox.markets = [
+    "Fall River",
+    "Providence",
+    "Bristol County",
+    "Unknown custom market",
+  ];
+  candidate.buyBox.states = ["MA", "RI"];
+
+  const result = validateImport(candidate);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.data.buyBox.marketsByState, {
+    MA: ["bristol county", "fall river"],
+    RI: ["bristol county", "providence"],
+  });
+});
+
 test("pipeline CSV neutralizes spreadsheet formulas", () => {
   const data = createEmptyData();
   data.deals.push({

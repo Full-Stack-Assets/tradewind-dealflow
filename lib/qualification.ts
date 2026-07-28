@@ -29,7 +29,7 @@ const COMPONENT_LABELS: Record<QualificationComponentKey, string> = {
   dataQuality: "Data quality",
   sellerProvidedFit: "Seller-provided fit",
 };
-const DEFAULT_MARKETS = [
+const DEFAULT_MA_MARKETS = [
   "Bristol County",
   "Plymouth County",
   "Norfolk County",
@@ -47,8 +47,11 @@ const DEFAULT_MARKETS = [
   "Swansea",
   "Somerset",
   "Rehoboth",
+];
+const DEFAULT_RI_MARKETS = [
   "Providence County",
   "Kent County",
+  "Bristol County",
   "Providence",
   "Pawtucket",
   "Central Falls",
@@ -80,6 +83,16 @@ export type QualificationStatus =
   | "Scored";
 export type QualificationComponentKey = (typeof COMPONENT_KEYS)[number];
 export type ComponentAssessment = "Assessed" | "Unassessed";
+export type SubfactorAssessment = "Supported" | "Missing" | "Unsupported";
+
+export type QualificationSubfactor = {
+  label: string;
+  targetPoints: number;
+  assessment: SubfactorAssessment;
+  inputFacts: string[];
+  pointsAwarded: number | null;
+  explanation: string;
+};
 
 export type QualificationComponent = {
   key: QualificationComponentKey;
@@ -92,6 +105,9 @@ export type QualificationComponent = {
   positiveReasons: string[];
   negativeReasons: string[];
   missingInformation: string[];
+  unsupportedInformation: string[];
+  calculatedSubtotal: number | null;
+  subfactors: QualificationSubfactor[];
   explanation: string;
 };
 
@@ -102,7 +118,18 @@ export type FinancialQualificationEvidence = {
   assignmentSpread: number | null;
   buyerProfit: number | null;
   wholesaleGrossMarginPercent: number | null;
+  source: string;
+  verifiedAt: string;
+  confidence: DataConfidence;
 };
+
+type FinancialNumericEvidenceKey =
+  | "estimatedValue"
+  | "acquisitionPrice"
+  | "estimatedEquityPercent"
+  | "assignmentSpread"
+  | "buyerProfit"
+  | "wholesaleGrossMarginPercent";
 
 export type MarketabilityEvidence = {
   comparableConfidence: number;
@@ -126,17 +153,25 @@ export type QualificationContext = {
   sellerProvidedFit?: SellerProvidedFitEvidence;
 };
 
-export type ComplianceActionStatus =
-  | "Blocked"
-  | "Human approval required";
+export type ComplianceState =
+  | "Clear for research"
+  | "Clear for manual review"
+  | "Outreach review required"
+  | "Outreach blocked"
+  | "Offer blocked"
+  | "Marketing blocked"
+  | "Transaction specialist review"
+  | "Do not contact"
+  | "Legal hold";
 
 export type ComplianceActionGate = {
-  status: ComplianceActionStatus;
+  status: ComplianceState;
   eligible: false;
   reason: string;
 };
 
 export type QualificationCompliance = {
+  state: ComplianceState;
   outreach: ComplianceActionGate;
   offer: ComplianceActionGate;
   contract: ComplianceActionGate;
@@ -167,17 +202,48 @@ export type ResearchTask = {
   reason: string;
 };
 
+export type ResearchPriorityLabel =
+  | "Critical"
+  | "High"
+  | "Medium"
+  | "Low"
+  | "Deferred";
+
+export type ResearchPriorityFactor = {
+  value: number;
+  source: "Evidence" | "Conservative task default";
+  explanation: string;
+};
+
+export type ResearchPriority = {
+  score: number;
+  label: ResearchPriorityLabel;
+  factors: {
+    opportunityPotential: ResearchPriorityFactor;
+    informationImpact: ResearchPriorityFactor;
+    timeSensitivity: ResearchPriorityFactor;
+    confidenceGap: ResearchPriorityFactor;
+  };
+  explanation: string;
+};
+
 export type QualificationResult = {
   dealId: string;
   buyBoxVersion: number;
   evaluatedAt: string;
   status: QualificationStatus;
   score: number | null;
+  scoreLabel:
+    | "Qualification score"
+    | "Preliminary score"
+    | "Score unavailable";
+  scoreExplanation: string;
   components: QualificationComponent[];
   reasons: string[];
   positiveReasons: string[];
   negativeReasons: string[];
   missingInformation: string[];
+  unsupportedInformation: string[];
   dataFreshness: DataFreshness;
   sourceConfidence: DataConfidence | null;
   restrictions: ResearchRestriction[];
@@ -186,6 +252,7 @@ export type QualificationResult = {
   recommendedAction: string;
   compliance: QualificationCompliance;
   researchTasks: ResearchTask[];
+  researchPriority: ResearchPriority;
 };
 
 export type BuyBoxValidationResult =
@@ -200,6 +267,8 @@ export type RankedResearchItem = {
   dataQualityScore: number | null;
   updatedAt: string;
   researchPriority: number;
+  researchPriorityLabel: ResearchPriorityLabel;
+  researchTaskOrder: ResearchTask["priority"] | null;
   recommendedAction: string;
   qualification: QualificationResult;
 };
@@ -228,7 +297,10 @@ export function createDefaultBuyBox(updatedAt: string): BuyBoxConfig {
     version: 1,
     updatedAt,
     states: ["MA", "RI"],
-    markets: normalizeTextArray(DEFAULT_MARKETS),
+    marketsByState: {
+      MA: normalizeTextArray(DEFAULT_MA_MARKETS),
+      RI: normalizeTextArray(DEFAULT_RI_MARKETS),
+    },
     propertyTypes: normalizeTextArray(DEFAULT_PROPERTY_TYPES),
     minPrice: 75_000,
     maxPrice: 500_000,
@@ -295,9 +367,8 @@ export function qualifyDeal(
     ({ usageClassification }) =>
       usageClassification === "Restricted — research only",
   );
-  const compliance = evaluateCompliance(
-    activeRestrictions,
-    restrictedSourceRights,
+  const ownerStatusRestriction = restrictionCodeForOwnerStatus(
+    deal.ownerContactStatus,
   );
 
   if (!buyBox.configured) {
@@ -313,7 +384,13 @@ export function qualifyDeal(
       confidence: null,
       recommendedAction:
         "Configure and save the editable operating buy box before qualification.",
-      compliance,
+      compliance: evaluateCompliance(
+        activeRestrictions,
+        restrictedSourceRights,
+        [],
+        ownerStatusRestriction,
+        "Unconfigured",
+      ),
       researchTasks: [],
     });
   }
@@ -334,14 +411,24 @@ export function qualifyDeal(
       confidence: null,
       recommendedAction:
         "Configure and save a valid buy box before reviewing this record.",
-      compliance,
+      compliance: evaluateCompliance(
+        activeRestrictions,
+        restrictedSourceRights,
+        ["The saved buy-box configuration is malformed or contradictory."],
+        ownerStatusRestriction,
+        "Disqualified",
+      ),
       researchTasks: [],
     });
   }
 
   const config = validated.value;
   const propertyFit = evaluatePropertyFit(deal, config);
-  const financial = evaluateFinancial(context.financial, config);
+  const financial = evaluateFinancial(
+    context.financial,
+    config,
+    evaluationDate,
+  );
   const marketability = evaluateMarketability(
     context.marketability,
     config,
@@ -350,10 +437,18 @@ export function qualifyDeal(
   const buyerDemand = evaluateBuyerDemand(
     deal,
     context.buyers,
+    context.financial,
+    financial,
     config,
     evaluationDate,
   );
-  const dataQuality = evaluateDataQuality(deal, config, evaluationDate);
+  const dataQuality = evaluateDataQuality(
+    deal,
+    config,
+    evaluationDate,
+    financial,
+    marketability,
+  );
   const sellerProvidedFit = evaluateSellerProvidedFit(
     context.sellerProvidedFit,
     config,
@@ -378,6 +473,11 @@ export function qualifyDeal(
   );
   const disqualifiers = [
     ...restrictionDisqualifiers,
+    ...(ownerStatusRestriction === "Do not contact"
+      ? ["Owner contact status requires do not contact."]
+      : ownerStatusRestriction === "Identity disputed"
+        ? ["Owner contact status records an identity dispute."]
+        : []),
     ...(restrictedSourceRights
       ? [
           "Source rights restrict this record to authorized research only.",
@@ -410,7 +510,15 @@ export function qualifyDeal(
     propertyFit,
     restrictedSourceRights,
     unapprovedSpecialistStrategies,
+    ownerStatusRestriction,
   });
+  const compliance = evaluateCompliance(
+    activeRestrictions,
+    restrictedSourceRights,
+    disqualifiers,
+    ownerStatusRestriction,
+    status,
+  );
   const preliminary = finalizeResult({
     deal,
     buyBox,
@@ -425,17 +533,23 @@ export function qualifyDeal(
     compliance,
     researchTasks: [],
   });
-  const score =
-    status === "Scored" ? calculateWeightedScore(components) : null;
-  const withScore = { ...preliminary, score };
-  return {
+  const scorePresentation = deriveScorePresentation(components);
+  const withScore = { ...preliminary, ...scorePresentation };
+  const withTasks = {
     ...withScore,
     researchTasks: deriveResearchTasks(
       withScore,
+      propertyFit,
       dataQuality,
       financial,
+      marketability,
       buyerDemand,
+      sellerProvidedFit,
     ),
+  };
+  return {
+    ...withTasks,
+    researchPriority: deriveResearchPriority(withTasks, dataQuality),
   };
 }
 
@@ -463,9 +577,9 @@ export function rankResearchQueue(
         qualification.components.find(({ key }) => key === "dataQuality")
           ?.score ?? null,
       updatedAt: deal.updatedAt,
-      researchPriority:
-        qualification.researchTasks[0]?.priority
-        ?? (qualification.status === "Scored" ? 7 : 1),
+      researchPriority: qualification.researchPriority.score,
+      researchPriorityLabel: qualification.researchPriority.label,
+      researchTaskOrder: qualification.researchTasks[0]?.priority ?? null,
       recommendedAction: qualification.recommendedAction,
       qualification,
     } satisfies RankedResearchItem;
@@ -489,7 +603,15 @@ function validateBuyBoxFields(
   | { ok: false; errors: string[] } {
   const errors: string[] = [];
   const rawStates = Array.isArray(input.states) ? input.states : [];
-  const rawMarkets = Array.isArray(input.markets) ? input.markets : [];
+  const rawMarketsByState = input.marketsByState as
+    | Partial<Record<StateCode, unknown>>
+    | undefined;
+  const rawMaMarkets = Array.isArray(rawMarketsByState?.MA)
+    ? rawMarketsByState.MA as string[]
+    : [];
+  const rawRiMarkets = Array.isArray(rawMarketsByState?.RI)
+    ? rawMarketsByState.RI as string[]
+    : [];
   const rawPropertyTypes = Array.isArray(input.propertyTypes)
     ? input.propertyTypes
     : [];
@@ -497,7 +619,10 @@ function validateBuyBoxFields(
     ? input.rehabLevels
     : [];
   const states = normalizeStates(rawStates);
-  const markets = normalizeTextArray(rawMarkets);
+  const marketsByState = {
+    MA: normalizeTextArray(rawMaMarkets),
+    RI: normalizeTextArray(rawRiMarkets),
+  };
   const propertyTypes = normalizeTextArray(rawPropertyTypes);
   const rehabLevels = normalizeRehabLevels(rawRehabLevels);
   if (
@@ -508,8 +633,18 @@ function validateBuyBoxFields(
   ) {
     errors.push("At least one valid state (MA or RI) is required.");
   }
-  if (rawMarkets.some((market) => normalizeText(market) === "")) {
-    errors.push("Market labels cannot be blank.");
+  if (
+    rawMarketsByState === undefined
+    || !Array.isArray(rawMarketsByState.MA)
+    || !Array.isArray(rawMarketsByState.RI)
+  ) {
+    errors.push("State-specific market configuration is required.");
+  } else if (
+    [...rawMaMarkets, ...rawRiMarkets].some(
+      (market) => normalizeText(String(market)) === "",
+    )
+  ) {
+    errors.push("State-specific market labels cannot be blank.");
   }
   if (
     propertyTypes.length === 0
@@ -584,7 +719,7 @@ function validateBuyBoxFields(
     ok: true,
     value: {
       states,
-      markets,
+      marketsByState,
       propertyTypes,
       minPrice: input.minPrice,
       maxPrice: input.maxPrice,
@@ -659,14 +794,21 @@ function evaluatePropertyFit(
   const disqualifiers: string[] = [];
   const market = normalizeMatchText(deal.market);
   const city = normalizeMatchText(deal.city);
+  const stateMatches = buyBox.states.includes(deal.state);
+  const configuredMarkets = buyBox.marketsByState[deal.state];
+  const marketFactsMissing =
+    configuredMarkets.length > 0 && market === "" && city === "";
   const geographyMatches =
-    buyBox.states.includes(deal.state)
+    stateMatches
+    && !marketFactsMissing
     && (
-      buyBox.markets.length === 0
-      || buyBox.markets.includes(market)
-      || buyBox.markets.includes(city)
+      configuredMarkets.length === 0
+      || configuredMarkets.includes(market)
+      || configuredMarkets.includes(city)
     );
-  if (geographyMatches) {
+  if (marketFactsMissing && stateMatches) {
+    missingInformation.push("Market or city for configured geography");
+  } else if (geographyMatches) {
     positiveReasons.push("State and configured market geography match exactly.");
   } else {
     negativeReasons.push("State or configured market is outside the buy box.");
@@ -709,6 +851,14 @@ function evaluatePropertyFit(
       positiveReasons,
       negativeReasons,
       missingInformation,
+      {
+        subfactors: propertySubfactors(
+          deal,
+          geographyMatches,
+          propertyType,
+          buyBox,
+        ),
+      },
     ),
     disqualifiers,
   };
@@ -717,10 +867,9 @@ function evaluatePropertyFit(
 function evaluateFinancial(
   evidence: FinancialQualificationEvidence | undefined,
   buyBox: NormalizedBuyBoxFields,
+  evaluationDate: Date,
 ): ComponentEvaluation {
-  const fields: Array<
-    [keyof FinancialQualificationEvidence, string]
-  > = [
+  const fields: Array<[FinancialNumericEvidenceKey, string]> = [
     ["estimatedValue", "Estimated value"],
     ["acquisitionPrice", "Acquisition price"],
     ["estimatedEquityPercent", "Estimated equity percent"],
@@ -731,13 +880,45 @@ function evaluateFinancial(
   const missingInformation = fields
     .filter(([key]) => !validFinancialEvidenceValue(key, evidence?.[key]))
     .map(([, label]) => `Financial feasibility evidence: ${label}`);
+  const inputFacts = evidence === undefined
+    ? []
+    : [
+        ...fields.map(([key, label]) => `${label}: ${String(evidence[key])}`),
+        `Source: ${evidence.source || "Not recorded"}`,
+        `Verified: ${evidence.verifiedAt || "Not recorded"}`,
+        `Confidence: ${evidence.confidence}`,
+      ];
+  if (!nonblank(evidence?.source ?? "")) {
+    missingInformation.push("Financial evidence source");
+  }
+  if (
+    evidence === undefined
+    || !validCurrentDate(
+      evidence.verifiedAt,
+      evaluationDate,
+      buyBox.maxVerificationAgeDays,
+      false,
+    )
+  ) {
+    missingInformation.push("Fresh financial evidence verification");
+  }
+  if (
+    evidence === undefined
+    || !CONFIDENCE_LEVELS.includes(evidence.confidence)
+    || confidenceRank(evidence.confidence)
+      < confidenceRank(buyBox.minimumConfidence)
+  ) {
+    missingInformation.push(
+      `Financial evidence confidence at or above ${buyBox.minimumConfidence}`,
+    );
+  }
   if (evidence === undefined || missingInformation.length > 0) {
     return {
       component: buildComponent(
         "financialFeasibility",
         buyBox.weights.financialFeasibility,
         null,
-        [],
+        inputFacts,
         [],
         [],
         missingInformation.length > 0
@@ -745,6 +926,7 @@ function evaluateFinancial(
           : fields.map(
               ([, label]) => `Financial feasibility evidence: ${label}`,
             ),
+        { subfactors: financialSubfactors(evidence, false) },
       ),
       disqualifiers: [],
     };
@@ -836,10 +1018,13 @@ function evaluateFinancial(
           / criterionScores.length
           * 100,
       ),
-      fields.map(([key, label]) => `${label}: ${String(evidence[key])}`),
+      [
+        ...inputFacts,
+      ],
       positiveReasons,
       negativeReasons,
       [],
+      { subfactors: financialSubfactors(evidence, true) },
     ),
     disqualifiers,
   };
@@ -872,6 +1057,7 @@ function evaluateMarketability(
         [],
         [],
         ["Current verified comparable confidence and source"],
+        { subfactors: marketabilitySubfactors(evidence, false) },
       ),
       disqualifiers: [],
     };
@@ -894,6 +1080,7 @@ function evaluateMarketability(
         ? []
         : ["Comparable confidence is below the 75% preparation threshold."],
       [],
+      { subfactors: marketabilitySubfactors(evidence, true) },
     ),
     disqualifiers: sufficient
       ? []
@@ -904,9 +1091,56 @@ function evaluateMarketability(
 function evaluateBuyerDemand(
   deal: DealRecord,
   buyers: BuyerRecord[] | undefined,
+  financialEvidence: FinancialQualificationEvidence | undefined,
+  financial: ComponentEvaluation,
   buyBox: NormalizedBuyBoxFields,
   evaluationDate: Date,
 ): ComponentEvaluation {
+  const unsupportedInformation = [
+    "Buyer profit preference is unsupported in the current local record.",
+    "Buyer yield preference is unsupported in the current local record.",
+    "Buyer closing speed is unsupported in the current local record.",
+    "Buyer occupancy, tenant, and unit preferences are unsupported in the current local record.",
+    "Buyer purchase performance is unsupported in the current local record.",
+    "Buyer activity and responsiveness are unsupported in the current local record.",
+  ];
+  const inputFacts = [
+    `Deal state: ${deal.state}`,
+    `Deal market: ${deal.market || "Not recorded"}`,
+    `Deal city: ${deal.city || "Not recorded"}`,
+    `Deal property type: ${deal.propertyType || "Not recorded"}`,
+    `Deal asking price: ${deal.askingPrice ?? "Not recorded"}`,
+    `Deal rehab: ${deal.rehabLevel ?? "Not recorded"}`,
+    `Deal exit strategies: ${deal.strategies.join(", ") || "Not recorded"}`,
+    `Acquisition economics: ${financialEvidence?.acquisitionPrice ?? "Not recorded"}`,
+    `Assignment spread economics: ${financialEvidence?.assignmentSpread ?? "Not recorded"}`,
+    `Buyer profit economics: ${financialEvidence?.buyerProfit ?? "Not recorded"}`,
+    `Wholesale gross margin economics: ${
+      financialEvidence?.wholesaleGrossMarginPercent ?? "Not recorded"
+    }`,
+  ];
+  const dealGaps: string[] = [];
+  if (normalizeMatchText(deal.propertyType) === "") {
+    dealGaps.push("Deal property type for buyer matching");
+  }
+  if (deal.askingPrice === null) {
+    dealGaps.push("Deal asking price for buyer matching");
+  }
+  if (deal.rehabLevel === null) {
+    dealGaps.push("Deal rehab level for buyer matching");
+  }
+  if (
+    normalizeMatchText(deal.market) === ""
+    && normalizeMatchText(deal.city) === ""
+  ) {
+    dealGaps.push("Deal market or city for buyer matching");
+  }
+  if (deal.strategies.length === 0) {
+    dealGaps.push("Deal exit strategy for buyer matching");
+  }
+  if (financial.component.assessment !== "Assessed") {
+    dealGaps.push("Current verified buyer economics evidence");
+  }
   const verified = (buyers ?? []).filter((buyer) =>
     buyer.proofOfFundsStatus === "Verified"
     && validCurrentDate(
@@ -922,27 +1156,74 @@ function evaluateBuyerDemand(
       false,
     )
   );
+  for (const buyer of buyers ?? []) {
+    inputFacts.push(
+      `Buyer ${buyer.id} POF: ${buyer.proofOfFundsStatus}; expires: ${
+        buyer.proofOfFundsExpiresAt || "Not recorded"
+      }; verified: ${buyer.lastVerifiedAt || "Not recorded"}`,
+    );
+  }
   if (verified.length === 0) {
     return {
       component: buildComponent(
         "buyerDemand",
         buyBox.weights.buyerDemand,
         null,
+        inputFacts,
         [],
         [],
-        [],
-        ["Current verified buyer evidence"],
+        [...dealGaps, "Current verified buyer proof of funds and criteria"],
+        {
+          unsupportedInformation,
+          subfactors: buyerSubfactors(false, buyers ?? []),
+        },
       ),
       disqualifiers: [],
     };
   }
-  const matches = verified.filter((buyer) => buyerMatchesDeal(buyer, deal));
+  const buyerGaps = uniqueStrings(
+    verified.flatMap((buyer) => buyerCriteriaGaps(buyer)),
+  );
+  if (dealGaps.length > 0 || buyerGaps.length > 0) {
+    return {
+      component: buildComponent(
+        "buyerDemand",
+        buyBox.weights.buyerDemand,
+        null,
+        inputFacts,
+        [],
+        [],
+        [...dealGaps, ...buyerGaps],
+        {
+          unsupportedInformation,
+          subfactors: buyerSubfactors(false, verified),
+        },
+      ),
+      disqualifiers: [],
+    };
+  }
+  for (const buyer of verified) {
+    inputFacts.push(
+      `Buyer ${buyer.id} supported criteria: states ${buyer.states.join(
+        ", ",
+      )}; markets ${buyer.markets.join(", ") || "state-level"}; property types ${
+        buyer.propertyTypes.join(", ")
+      }; price ${buyer.minPrice ?? "no minimum"}–${
+        buyer.maxPrice ?? "no maximum"
+      }; rehab ${buyer.rehabTolerance.join(", ")}; exits ${
+        buyer.strategies.join(", ")
+      }.`,
+    );
+  }
+  const matches = verified.filter((buyer) =>
+    buyerMatchesDeal(buyer, deal)
+  );
   return {
     component: buildComponent(
       "buyerDemand",
       buyBox.weights.buyerDemand,
       matches.length > 0 ? 100 : 0,
-      [`${verified.length} current verified buyer records reviewed`],
+      inputFacts,
       matches.length > 0
         ? [`${matches.length} verified buyer criteria record(s) match exactly.`]
         : [],
@@ -950,6 +1231,10 @@ function evaluateBuyerDemand(
         ? ["No verified buyer criteria record matches the supported facts."]
         : [],
       [],
+      {
+        unsupportedInformation,
+        subfactors: buyerSubfactors(true, verified),
+      },
     ),
     disqualifiers: [],
   };
@@ -959,13 +1244,16 @@ function evaluateDataQuality(
   deal: DealRecord,
   buyBox: NormalizedBuyBoxFields,
   evaluationDate: Date,
+  financial: ComponentEvaluation,
+  marketability: ComponentEvaluation,
 ): DataQualityEvaluation {
   const eligible = deal.sourceAssertions.filter(
     ({ usageClassification }) =>
       usageClassification !== "Restricted — research only",
   );
   const selected = eligible.slice().sort(compareAssertions)[0] ?? null;
-  const complete = eligible.some(assertionHasCompleteProvenance);
+  const provenanceMissing = provenanceGaps(selected);
+  const complete = provenanceMissing.length === 0;
   const freshness = evaluateFreshness(selected?.lastVerifiedAt, evaluationDate, buyBox.maxVerificationAgeDays);
   const confidence = selected?.confidence ?? null;
   const confidenceMeets =
@@ -975,7 +1263,7 @@ function evaluateDataQuality(
     ({ status }) => status === "Unresolved",
   ).length;
   const missingInformation: string[] = [];
-  if (!complete) missingInformation.push("Complete authorized provenance");
+  missingInformation.push(...provenanceMissing);
   if (!confidenceMeets) {
     missingInformation.push(`Confidence at or above ${buyBox.minimumConfidence}`);
   }
@@ -989,13 +1277,17 @@ function evaluateDataQuality(
   }
   const confidencePoints =
     confidence === null ? 0 : { High: 25, Medium: 15, Low: 5 }[confidence];
-  const score =
-    selected === null
-      ? null
-      : (complete ? 40 : 0)
-        + confidencePoints
-        + (freshness.status === "Fresh" ? 25 : 0)
-        + (unresolved === 0 ? 10 : 0);
+  const subtotal =
+    (complete ? 40 : 0)
+    + confidencePoints
+    + (freshness.status === "Fresh" ? 25 : 0)
+    + (unresolved === 0 ? 10 : 0);
+  const trustworthy =
+    complete
+    && confidenceMeets
+    && freshness.status === "Fresh"
+    && unresolved === 0;
+  const score = trustworthy ? subtotal : null;
   const positiveReasons: string[] = [];
   const negativeReasons: string[] = [];
   if (complete) positiveReasons.push("An eligible source has complete required provenance.");
@@ -1019,6 +1311,18 @@ function evaluateDataQuality(
       positiveReasons,
       negativeReasons,
       missingInformation,
+      {
+        calculatedSubtotal: subtotal,
+        explanation: trustworthy
+          ? `Data quality is ${subtotal}/100 from the recorded trustworthy inputs.`
+          : `Data quality is Unassessed; the explanatory subtotal is ${subtotal}/100, but provenance, confidence, freshness, or conflict gates are unresolved.`,
+        subfactors: dataQualitySubfactors(
+          deal,
+          selected,
+          financial,
+          marketability,
+        ),
+      },
     ),
     disqualifiers: [],
     selectedAssertion: selected,
@@ -1034,6 +1338,11 @@ function evaluateSellerProvidedFit(
   buyBox: NormalizedBuyBoxFields,
   evaluationDate: Date,
 ): ComponentEvaluation {
+  const hasExactReason =
+    evidence !== undefined
+    && [...evidence.positiveReasons, ...evidence.negativeReasons].some(
+      nonblank,
+    );
   const valid =
     evidence !== undefined
     && evidence.voluntarilyProvided
@@ -1041,6 +1350,7 @@ function evaluateSellerProvidedFit(
     && evidence.score >= 0
     && evidence.score <= 100
     && nonblank(evidence.source)
+    && hasExactReason
     && validCurrentDate(
       evidence.verifiedAt,
       evaluationDate,
@@ -1048,15 +1358,26 @@ function evaluateSellerProvidedFit(
       false,
     );
   if (!valid || evidence === undefined) {
+    const missing = ["Current voluntarily supplied seller-provided fit information"];
+    if (evidence !== undefined && !hasExactReason) {
+      missing.push("At least one exact seller-provided fit reason");
+    }
     return {
       component: buildComponent(
         "sellerProvidedFit",
         buyBox.weights.sellerProvidedFit,
         null,
+        evidence === undefined
+          ? []
+          : [
+              `Source: ${evidence.source || "Not recorded"}`,
+              `Verified: ${evidence.verifiedAt || "Not recorded"}`,
+              `Recorded score: ${evidence.score}`,
+            ],
         [],
         [],
-        [],
-        ["Current voluntarily supplied seller-provided fit information"],
+        missing,
+        { subfactors: sellerSubfactors(evidence, false) },
       ),
       disqualifiers: [],
     };
@@ -1066,12 +1387,332 @@ function evaluateSellerProvidedFit(
       "sellerProvidedFit",
       buyBox.weights.sellerProvidedFit,
       evidence.score,
-      [`Source: ${evidence.source}`, `Verified: ${evidence.verifiedAt}`],
+      [
+        `Source: ${evidence.source}`,
+        `Verified: ${evidence.verifiedAt}`,
+        `Recorded score: ${evidence.score}`,
+      ],
       evidence.positiveReasons.slice(),
       evidence.negativeReasons.slice(),
       [],
+      { subfactors: sellerSubfactors(evidence, true) },
     ),
     disqualifiers: [],
+  };
+}
+
+function propertySubfactors(
+  deal: DealRecord,
+  geographyMatches: boolean,
+  propertyType: string,
+  buyBox: NormalizedBuyBoxFields,
+): QualificationSubfactor[] {
+  const configuredMarkets = buyBox.marketsByState[deal.state];
+  const geographyRecorded =
+    buyBox.states.includes(deal.state)
+    && (
+      configuredMarkets.length === 0
+      || normalizeMatchText(deal.market) !== ""
+      || normalizeMatchText(deal.city) !== ""
+    );
+  return [
+    subfactor(
+      "Geography",
+      25,
+      geographyRecorded ? "Supported" : "Missing",
+      [deal.state, deal.market, deal.city].filter(nonblank),
+      geographyRecorded
+        ? geographyMatches
+          ? "Recorded state and state-specific market facts match."
+          : "Recorded geography is available and does not match."
+        : "State-specific market or city evidence is missing.",
+    ),
+    subfactor(
+      "Property type",
+      25,
+      propertyType === "" ? "Missing" : "Supported",
+      propertyType === "" ? [] : [deal.propertyType],
+      propertyType === ""
+        ? "Property type is missing."
+        : "Recorded property type is available for exact buy-box comparison.",
+    ),
+    subfactor(
+      "Price",
+      20,
+      deal.askingPrice === null ? "Missing" : "Supported",
+      deal.askingPrice === null ? [] : [`Asking price: ${deal.askingPrice}`],
+      deal.askingPrice === null
+        ? "Recorded asking price is missing."
+        : "Recorded asking price is available; this target is disclosed separately from financial underwriting.",
+    ),
+    subfactor(
+      "Repair",
+      15,
+      deal.rehabLevel === null ? "Missing" : "Supported",
+      deal.rehabLevel === null ? [] : [`Rehab level: ${deal.rehabLevel}`],
+      deal.rehabLevel === null
+        ? "Repair or rehab evidence is missing."
+        : "Recorded rehab level is available for buy-box comparison.",
+    ),
+    subfactor(
+      "Ownership/property suitability",
+      15,
+      "Missing",
+      [],
+      "Verified ownership duration, title suitability, and broader property-suitability evidence are not present in the current local record.",
+    ),
+  ];
+}
+
+function financialSubfactors(
+  evidence: FinancialQualificationEvidence | undefined,
+  trustworthy: boolean,
+): QualificationSubfactor[] {
+  const supported = trustworthy ? "Supported" : "Missing";
+  return [
+    subfactor(
+      "Equity",
+      20,
+      supported,
+      evidence === undefined
+        ? []
+        : [`Estimated equity percent: ${evidence.estimatedEquityPercent}`],
+      trustworthy
+        ? "Current sourced equity evidence is available."
+        : "Current sourced equity evidence is incomplete or untrusted.",
+    ),
+    subfactor(
+      "Spread",
+      25,
+      supported,
+      evidence === undefined
+        ? []
+        : [`Assignment spread: ${evidence.assignmentSpread}`],
+      trustworthy
+        ? "Current sourced assignment-spread evidence is available."
+        : "Current sourced assignment-spread evidence is incomplete or untrusted.",
+    ),
+    subfactor(
+      "Buyer profit",
+      25,
+      supported,
+      evidence === undefined ? [] : [`Buyer profit: ${evidence.buyerProfit}`],
+      trustworthy
+        ? "Current sourced buyer-profit evidence is available."
+        : "Current sourced buyer-profit evidence is incomplete or untrusted.",
+    ),
+    subfactor(
+      "Costs",
+      15,
+      "Missing",
+      [],
+      "Itemized acquisition, financing, holding, closing, and selling costs are not supported by this qualification context.",
+    ),
+    subfactor(
+      "Sensitivity",
+      15,
+      "Missing",
+      [],
+      "Evidence-backed value, repair, timing, and cost sensitivity ranges are not present.",
+    ),
+  ];
+}
+
+function marketabilitySubfactors(
+  evidence: MarketabilityEvidence | undefined,
+  trustworthy: boolean,
+): QualificationSubfactor[] {
+  return [
+    subfactor(
+      "Comparable evidence",
+      25,
+      trustworthy ? "Supported" : "Missing",
+      evidence === undefined
+        ? []
+        : [
+            `Comparable confidence: ${evidence.comparableConfidence}`,
+            `Source: ${evidence.source}`,
+            `Verified: ${evidence.verifiedAt}`,
+          ],
+      trustworthy
+        ? "Current sourced comparable confidence is available."
+        : "Current sourced comparable evidence is missing or stale.",
+    ),
+    subfactor("Market activity", 20, "Missing", [], "Verified market-activity evidence is not present."),
+    subfactor("Days to commitment", 20, "Missing", [], "Verified days-to-commitment evidence is not present."),
+    subfactor("Property-type demand", 20, "Missing", [], "Verified property-type demand evidence is not present."),
+    subfactor("Exit diversity", 15, "Missing", [], "Verified exit-diversity evidence is not present."),
+  ];
+}
+
+function buyerSubfactors(
+  assessed: boolean,
+  buyers: BuyerRecord[],
+): QualificationSubfactor[] {
+  const pofFacts = buyers.map(
+    (buyer) =>
+      `${buyer.id}: ${buyer.proofOfFundsStatus}; expires ${buyer.proofOfFundsExpiresAt || "not recorded"}`,
+  );
+  return [
+    subfactor(
+      "Exact matches",
+      30,
+      assessed ? "Supported" : "Missing",
+      [],
+      assessed
+        ? "Exact supported buyer criteria were evaluated."
+        : "Exact matching cannot be completed from current verified criteria.",
+    ),
+    subfactor(
+      "Valid proof of funds",
+      25,
+      pofFacts.length > 0 ? "Supported" : "Missing",
+      pofFacts,
+      pofFacts.length > 0
+        ? "Recorded proof-of-funds status and dates are disclosed; scoring still requires current verification."
+        : "No proof-of-funds evidence is recorded.",
+    ),
+    subfactor(
+      "Recent active buyer evidence",
+      20,
+      "Unsupported",
+      [],
+      "Recent buyer activity is unsupported in the current local record.",
+    ),
+    subfactor(
+      "Closing performance",
+      15,
+      "Unsupported",
+      [],
+      "Buyer closing performance is unsupported in the current local record.",
+    ),
+    subfactor(
+      "Price competition",
+      10,
+      "Unsupported",
+      [],
+      "Evidence of price competition among verified buyers is unsupported.",
+    ),
+  ];
+}
+
+function dataQualitySubfactors(
+  deal: DealRecord,
+  assertion: SourceAssertion | null,
+  financial: ComponentEvaluation,
+  marketability: ComponentEvaluation,
+): QualificationSubfactor[] {
+  const contactRecorded =
+    nonblank(deal.ownerContactStatus)
+    && !["not researched", "unknown"].includes(
+      normalizeMatchText(deal.ownerContactStatus),
+    );
+  return [
+    subfactor(
+      "Property identity",
+      20,
+      assertion !== null
+        && nonblank(assertion.sourceRecordId)
+        && nonblank(assertion.facts.address)
+        ? "Supported"
+        : "Missing",
+      assertion === null
+        ? []
+        : [assertion.sourceRecordId, assertion.facts.address].filter(nonblank),
+      "Property identity support uses only recorded source identity and address facts.",
+    ),
+    subfactor("Ownership", 20, "Missing", [], "Verified current ownership evidence is not present."),
+    subfactor(
+      "Current value",
+      15,
+      financial.component.assessment === "Assessed" ? "Supported" : "Missing",
+      financial.component.inputFacts.filter((fact) =>
+        /estimated value|source|verified|confidence/i.test(fact)
+      ),
+      financial.component.assessment === "Assessed"
+        ? "Current sourced value evidence is available in the qualification context."
+        : "Current sourced value evidence is missing or untrusted.",
+    ),
+    subfactor(
+      "Comparable evidence",
+      15,
+      marketability.component.assessment === "Assessed"
+        ? "Supported"
+        : "Missing",
+      marketability.component.inputFacts,
+      marketability.component.assessment === "Assessed"
+        ? "Current sourced comparable confidence is available."
+        : "Current sourced comparable evidence is missing or stale.",
+    ),
+    subfactor(
+      "Repair evidence",
+      15,
+      deal.rehabLevel === null ? "Missing" : "Supported",
+      deal.rehabLevel === null ? [] : [deal.rehabLevel],
+      deal.rehabLevel === null
+        ? "Repair evidence is missing."
+        : "A canonical repair or rehab level is recorded.",
+    ),
+    subfactor(
+      "Usage rights",
+      10,
+      assertion !== null
+        && assertion.usageClassification !== "Restricted — research only"
+        ? "Supported"
+        : "Missing",
+      assertion === null ? [] : [assertion.usageClassification],
+      "Only explicit non-restricted usage rights support this target.",
+    ),
+    subfactor(
+      "Contact evidence",
+      5,
+      contactRecorded ? "Supported" : "Missing",
+      contactRecorded ? [deal.ownerContactStatus] : [],
+      contactRecorded
+        ? "A factual owner-contact status is recorded; it does not grant outreach permission."
+        : "Reliable contact status is not recorded.",
+    ),
+  ];
+}
+
+function sellerSubfactors(
+  evidence: SellerProvidedFitEvidence | undefined,
+  assessed: boolean,
+): QualificationSubfactor[] {
+  return [
+    subfactor(
+      "Voluntary seller-provided facts",
+      100,
+      assessed ? "Supported" : "Missing",
+      evidence === undefined
+        ? []
+        : [
+            `Source: ${evidence.source || "Not recorded"}`,
+            `Verified: ${evidence.verifiedAt || "Not recorded"}`,
+            ...evidence.positiveReasons,
+            ...evidence.negativeReasons,
+          ].filter(nonblank),
+      assessed
+        ? "Current voluntary seller-provided facts and exact reasons support this component."
+        : "Current voluntary seller-provided facts with exact reasons are missing.",
+    ),
+  ];
+}
+
+function subfactor(
+  label: string,
+  targetPoints: number,
+  assessment: SubfactorAssessment,
+  inputFacts: string[],
+  explanation: string,
+): QualificationSubfactor {
+  return {
+    label,
+    targetPoints,
+    assessment,
+    inputFacts,
+    pointsAwarded: null,
+    explanation,
   };
 }
 
@@ -1083,13 +1724,20 @@ function buildComponent(
   positiveReasons: string[],
   negativeReasons: string[],
   missingInformation: string[],
+  options: {
+    unsupportedInformation?: string[];
+    calculatedSubtotal?: number | null;
+    explanation?: string;
+    subfactors?: QualificationSubfactor[];
+  } = {},
 ): QualificationComponent {
   const assessment: ComponentAssessment =
     score === null ? "Unassessed" : "Assessed";
-  const explanation =
+  const explanation = options.explanation ?? (
     assessment === "Unassessed"
       ? `${COMPONENT_LABELS[key]} is Unassessed because required real inputs are missing or not current.`
-      : `${COMPONENT_LABELS[key]} is ${score}/100 from the recorded inputs.`;
+      : `${COMPONENT_LABELS[key]} is ${score}/100 from the recorded inputs.`
+  );
   return {
     key,
     label: COMPONENT_LABELS[key],
@@ -1101,6 +1749,9 @@ function buildComponent(
     positiveReasons,
     negativeReasons,
     missingInformation,
+    unsupportedInformation: options.unsupportedInformation ?? [],
+    calculatedSubtotal: options.calculatedSubtotal ?? null,
+    subfactors: options.subfactors ?? [],
     explanation,
   };
 }
@@ -1121,17 +1772,42 @@ function emptyComponents(buyBox: BuyBoxConfig): QualificationComponent[] {
 
 function calculateWeightedScore(
   components: QualificationComponent[],
-): number {
+): number | null {
   const included = components.filter(
     ({ included, score }) => included && score !== null,
   );
   const totalWeight = included.reduce((sum, { weight }) => sum + weight, 0);
-  if (totalWeight === 0) return 0;
+  if (totalWeight === 0) return null;
   const weighted = included.reduce(
     (sum, { score, weight }) => sum + (score ?? 0) * weight,
     0,
   );
   return Math.round(weighted / totalWeight);
+}
+
+function deriveScorePresentation(
+  components: QualificationComponent[],
+): Pick<QualificationResult, "score" | "scoreLabel" | "scoreExplanation"> {
+  const hasWeightedGap = components.some(
+    ({ assessment, weight }) => assessment === "Unassessed" && weight > 0,
+  );
+  const score = calculateWeightedScore(components);
+  if (hasWeightedGap) {
+    return {
+      score,
+      scoreLabel: "Preliminary score",
+      scoreExplanation: score === null
+        ? "Preliminary score is unavailable because there is no assessed positive-weight component; missing evidence is never converted to zero."
+        : "Preliminary score is normalized over assessed positive weights only; Unassessed components are excluded rather than treated as zero.",
+    };
+  }
+  return {
+    score,
+    scoreLabel: score === null ? "Score unavailable" : "Qualification score",
+    scoreExplanation: score === null
+      ? "No positive-weight component is available for scoring."
+      : "Qualification score uses all assessed positive-weight components.",
+  };
 }
 
 function finalizeResult(input: {
@@ -1159,17 +1835,25 @@ function finalizeResult(input: {
       ({ missingInformation: missing }) => missing,
     ),
   );
+  const unsupportedInformation = uniqueStrings(
+    input.components.flatMap(
+      ({ unsupportedInformation: unsupported }) => unsupported,
+    ),
+  );
   return {
     dealId: input.deal.id,
     buyBoxVersion: input.buyBox.version,
     evaluatedAt: input.evaluationDate.toISOString(),
     status: input.status,
     score: null,
+    scoreLabel: "Score unavailable",
+    scoreExplanation: "A valid configured qualification is required before scoring.",
     components: input.components,
     reasons: [...positiveReasons, ...negativeReasons],
     positiveReasons,
     negativeReasons,
     missingInformation,
+    unsupportedInformation,
     dataFreshness: input.freshness,
     sourceConfidence: input.confidence,
     restrictions: input.activeRestrictions.map((restriction) => ({
@@ -1184,53 +1868,122 @@ function finalizeResult(input: {
     recommendedAction: input.recommendedAction,
     compliance: input.compliance,
     researchTasks: input.researchTasks,
+    researchPriority: deferredResearchPriority(),
   };
 }
 
 function evaluateCompliance(
   restrictions: ResearchRestriction[],
   restrictedSourceRights: boolean,
+  disqualifiers: string[],
+  ownerStatusRestriction: "Do not contact" | "Identity disputed" | null,
+  qualificationStatus: QualificationStatus,
 ): QualificationCompliance {
-  const blocking = restrictions.find(({ code }) =>
-    [
-      "Do not contact",
-      "Identity disputed",
-      "Ownership stale",
-      "Source restricted",
-      "Specialist review",
-    ].includes(code)
-  );
-  const sourceRightsReason = restrictedSourceRights
-    ? "Restricted source rights block outreach."
-    : null;
+  const hasRestriction = (code: ResearchRestriction["code"]): boolean =>
+    restrictions.some((restriction) => restriction.code === code);
+  const doNotContact =
+    ownerStatusRestriction === "Do not contact"
+    || hasRestriction("Do not contact");
+  const legalHold =
+    ownerStatusRestriction === "Identity disputed"
+    || hasRestriction("Identity disputed")
+    || hasRestriction("Ownership stale");
+  const specialistReview =
+    hasRestriction("Specialist review")
+    || disqualifiers.some((item) => /specialist legal review/i.test(item));
+  const sourceBlocked =
+    restrictedSourceRights || hasRestriction("Source restricted");
+  const hardGateReason =
+    disqualifiers.length === 0
+      ? null
+      : `Qualification hard gate: ${disqualifiers.join(" ")}`;
+  const state: ComplianceState = doNotContact
+    ? "Do not contact"
+    : legalHold
+      ? "Legal hold"
+      : specialistReview
+        ? "Transaction specialist review"
+        : sourceBlocked
+          ? "Outreach blocked"
+          : hardGateReason !== null
+            ? "Offer blocked"
+            : qualificationStatus === "Scored"
+              ? "Clear for manual review"
+              : "Clear for research";
   return {
+    state,
     outreach:
-      blocking === undefined && sourceRightsReason === null
-        ? approvalGate(
-            "First homeowner contact requires recorded human approval.",
+      doNotContact
+        ? complianceGate("Do not contact", "A recorded do-not-contact state blocks outreach.")
+        : legalHold
+          ? complianceGate("Legal hold", "Identity or ownership risk places outreach on legal hold.")
+          : sourceBlocked
+            ? complianceGate("Outreach blocked", "Restricted source rights block outreach.")
+            : specialistReview
+              ? complianceGate(
+                  "Transaction specialist review",
+                  "Specialist review is required before any outreach progression.",
+                )
+              : complianceGate(
+                  "Outreach review required",
+                  "First homeowner contact requires recorded human approval.",
+                ),
+    offer:
+      hardGateReason === null
+        ? complianceGate(
+            "Clear for manual review",
+            "Offers and LOIs require recorded human approval.",
           )
-        : {
-            status: "Blocked",
-            eligible: false,
-            reason:
-              sourceRightsReason
-              ?? `Active ${blocking!.code.toLowerCase()} restriction blocks outreach.`,
-          },
-    offer: approvalGate("Offers and LOIs require recorded human approval."),
-    contract: approvalGate(
-      "Contracts and amendments require recorded human approval.",
-    ),
-    marketing: approvalGate(
-      "Public marketing requires recorded human approval.",
-    ),
-    funds: approvalGate(
-      "Earnest money, closing instructions, and funds require recorded human approval.",
-    ),
+        : complianceGate(
+            legalHold ? "Legal hold" : specialistReview
+              ? "Transaction specialist review"
+              : "Offer blocked",
+            hardGateReason,
+          ),
+    contract:
+      hardGateReason === null
+        ? complianceGate(
+            "Clear for manual review",
+            "Contracts and amendments require recorded human approval.",
+          )
+        : complianceGate(
+            legalHold ? "Legal hold" : specialistReview
+              ? "Transaction specialist review"
+              : "Offer blocked",
+            hardGateReason,
+          ),
+    marketing:
+      sourceBlocked || hardGateReason !== null
+        ? complianceGate(
+            legalHold ? "Legal hold" : "Marketing blocked",
+            sourceBlocked
+              ? "Restricted source rights block public marketing."
+              : hardGateReason!,
+          )
+        : complianceGate(
+            "Clear for manual review",
+            "Public marketing requires recorded human approval.",
+          ),
+    funds:
+      hardGateReason === null
+        ? complianceGate(
+            "Clear for manual review",
+            "Earnest money, closing instructions, and funds require recorded human approval.",
+          )
+        : complianceGate(
+            legalHold ? "Legal hold" : specialistReview
+              ? "Transaction specialist review"
+              : "Offer blocked",
+            hardGateReason,
+          ),
   };
 }
 
-function approvalGate(reason: string): ComplianceActionGate {
-  return { status: "Human approval required", eligible: false, reason };
+function complianceGate(
+  status: ComplianceState,
+  reason: string,
+): ComplianceActionGate {
+  return { status, eligible: false, reason };
 }
 
 function deriveRecommendedAction(input: {
@@ -1243,6 +1996,7 @@ function deriveRecommendedAction(input: {
   propertyFit: ComponentEvaluation;
   restrictedSourceRights: boolean;
   unapprovedSpecialistStrategies: string[];
+  ownerStatusRestriction: "Do not contact" | "Identity disputed" | null;
 }): string {
   const hold = input.activeRestrictions.find(({ code }) =>
     [
@@ -1254,6 +2008,9 @@ function deriveRecommendedAction(input: {
   );
   if (hold !== undefined) {
     return `Preserve the ${hold.code.toLowerCase()} hold and complete only authorized manual review.`;
+  }
+  if (input.ownerStatusRestriction !== null) {
+    return `Preserve the ${input.ownerStatusRestriction.toLowerCase()} hold recorded by owner contact status.`;
   }
   if (
     input.restrictedSourceRights
@@ -1293,9 +2050,12 @@ function deriveRecommendedAction(input: {
 
 function deriveResearchTasks(
   result: QualificationResult,
+  propertyFit: ComponentEvaluation,
   quality: DataQualityEvaluation,
   financial: ComponentEvaluation,
+  marketability: ComponentEvaluation,
   buyerDemand: ComponentEvaluation,
+  sellerProvidedFit: ComponentEvaluation,
 ): ResearchTask[] {
   const tasks: ResearchTask[] = [];
   if (
@@ -1306,15 +2066,27 @@ function deriveResearchTasks(
   ) {
     tasks.push(task(1, "Legal/identity risk", "Attorney review", "Resolve active legal, identity, rights, or restriction risk."));
   }
-  tasks.push(task(2, "Ownership verification", "Ownership", "Verify current ownership and a reliable property identity before progression."));
+  if (
+    quality.missingProvenance
+    || result.disqualifiers.some((item) => /identity|ownership/i.test(item))
+  ) {
+    tasks.push(task(2, "Ownership verification", "Ownership", "Verify current ownership and a reliable property identity before progression."));
+  }
   if (
     quality.component.assessment === "Unassessed"
     || quality.component.missingInformation.length > 0
   ) {
     tasks.push(task(3, "Data-quality impact", "Source verification", "Repair provenance, confidence, freshness, or conflicts."));
   }
-  if (financial.component.assessment === "Unassessed") {
-    tasks.push(task(4, "Underwriting impact", "Underwriting", "Collect the missing real financial inputs."));
+  if (
+    propertyFit.component.assessment === "Unassessed"
+    || propertyFit.disqualifiers.length > 0
+    || financial.component.assessment === "Unassessed"
+    || financial.disqualifiers.length > 0
+    || marketability.component.assessment === "Unassessed"
+    || marketability.disqualifiers.length > 0
+  ) {
+    tasks.push(task(4, "Underwriting impact", "Underwriting", "Resolve the recorded property-fit, comparable, or financial evidence issue."));
   }
   if (
     buyerDemand.component.assessment === "Unassessed"
@@ -1325,8 +2097,19 @@ function deriveResearchTasks(
   if (quality.freshness.status !== "Fresh") {
     tasks.push(task(6, "Time sensitivity", "Listing/sale history", "Refresh time-sensitive property and source facts."));
   }
-  if (result.score === null) {
-    tasks.push(task(7, "Opportunity score", "Missing qualification facts", "Complete required assessed components before numeric ranking."));
+  if (
+    result.components.some(
+      ({ assessment, weight }) => assessment === "Unassessed" && weight > 0,
+    )
+  ) {
+    tasks.push(task(
+      7,
+      "Opportunity score",
+      sellerProvidedFit.component.assessment === "Unassessed"
+        ? "Seller facts"
+        : "Missing qualification facts",
+      "Complete the component-specific missing facts before numeric ranking.",
+    ));
   }
   if (financial.component.assessment === "Unassessed") {
     tasks.push(task(8, "Estimated transaction potential", "Transaction economics", "Complete real transaction economics without inventing potential."));
@@ -1341,6 +2124,177 @@ function task(
   reason: string,
 ): ResearchTask {
   return { priority, category, taskType, reason };
+}
+
+export function labelResearchPriority(
+  score: number,
+): ResearchPriorityLabel {
+  if (score >= 90) return "Critical";
+  if (score >= 75) return "High";
+  if (score >= 50) return "Medium";
+  if (score >= 25) return "Low";
+  return "Deferred";
+}
+
+function deriveResearchPriority(
+  result: QualificationResult,
+  quality: DataQualityEvaluation,
+): ResearchPriority {
+  if (result.researchTasks.length === 0) return deferredResearchPriority();
+  const combined = [
+    ...result.disqualifiers,
+    ...result.restrictions.map(({ code, reason }) => `${code}: ${reason}`),
+  ].join(" ");
+  const criticalSafety =
+    /identity|ownership dispute|ownership change|do not contact|opt.?out|suppression failure|legal deadline|foreclosure|bankruptcy|probate|incapacity|attorney request/i
+      .test(combined);
+  const highResearch =
+    quality.unresolvedConflicts > 0
+    || result.researchTasks.some(({ category, reason, taskType }) =>
+      category === "Underwriting impact"
+      || category === "Buyer-match impact"
+      || /comparable|comp\b|repair|listing|proof of funds|\bpof\b|title|lien|material conflict/i
+        .test(`${reason} ${taskType}`)
+    );
+  const opportunityPotential: ResearchPriorityFactor =
+    result.score === null
+      ? factor(
+          50,
+          "Conservative task default",
+          "No assessed-only qualification score is available, so a neutral fit default is used without estimating transaction value.",
+        )
+      : factor(
+          result.score,
+          "Evidence",
+          "Uses the normalized qualification fit score, not projected revenue or transaction value.",
+        );
+  const informationImpact = factor(
+    criticalSafety ? 100 : highResearch ? 85 : 60,
+    "Conservative task default",
+    criticalSafety
+      ? "Critical safety facts have maximum decision impact."
+      : highResearch
+        ? "Comparable, repair, buyer, title, lien, or conflict research has a high disclosed decision impact."
+        : "The highest generated task uses a conservative medium information-impact default.",
+  );
+  const timeSensitivity = factor(
+    criticalSafety ? 100 : highResearch ? 75 : 50,
+    "Conservative task default",
+    criticalSafety
+      ? "Critical safety work receives an immediate time-sensitivity default."
+      : highResearch
+        ? "High research work receives a conservative time-sensitive default."
+        : "No evidence-backed deadline is recorded; a conservative task default is used.",
+  );
+  const subtotal = quality.component.calculatedSubtotal;
+  const confidenceGap = factor(
+    criticalSafety
+      ? 100
+      : highResearch
+        ? Math.max(75, subtotal === null ? 75 : 100 - subtotal)
+        : subtotal === null
+          ? 60
+          : Math.max(10, 100 - subtotal),
+    criticalSafety || highResearch || subtotal === null
+      ? "Conservative task default"
+      : "Evidence",
+    criticalSafety
+      ? "Critical safety work uses the maximum conservative confidence-gap default."
+      : highResearch
+        ? `High research uses a conservative confidence-gap floor${
+            subtotal === null ? "" : ` anchored to the ${subtotal}/100 data-quality subtotal`
+          }.`
+        : subtotal === null
+      ? "No explanatory data-quality subtotal is available, so a conservative confidence-gap default is used."
+      : `Confidence gap is anchored to the disclosed data-quality subtotal of ${subtotal}/100.`,
+  );
+  const raw = Math.round(
+    (
+      opportunityPotential.value
+      * informationImpact.value
+      * timeSensitivity.value
+      * confidenceGap.value
+    ) ** 0.25,
+  );
+  const score = criticalSafety
+    ? 95
+    : highResearch
+      ? Math.max(80, Math.min(89, raw))
+      : Math.max(0, Math.min(100, raw));
+  return {
+    score,
+    label: labelResearchPriority(score),
+    factors: {
+      opportunityPotential,
+      informationImpact,
+      timeSensitivity,
+      confidenceGap,
+    },
+    explanation:
+      "Research priority is the disclosed geometric combination of opportunity fit, information impact, time sensitivity, and confidence gap, with conservative task-class floors for safety/high research. It is not predicted transaction value.",
+  };
+}
+
+function deferredResearchPriority(): ResearchPriority {
+  const deferred = factor(
+    0,
+    "Conservative task default",
+    "No generated research task requires prioritization.",
+  );
+  return {
+    score: 0,
+    label: "Deferred",
+    factors: {
+      opportunityPotential: deferred,
+      informationImpact: deferred,
+      timeSensitivity: deferred,
+      confidenceGap: deferred,
+    },
+    explanation:
+      "No generated research work is pending; this deferred score is not predicted transaction value.",
+  };
+}
+
+function factor(
+  value: number,
+  source: ResearchPriorityFactor["source"],
+  explanation: string,
+): ResearchPriorityFactor {
+  return { value: Math.max(0, Math.min(100, value)), source, explanation };
+}
+
+function buyerCriteriaGaps(buyer: BuyerRecord): string[] {
+  const gaps: string[] = [];
+  if (buyer.states.length === 0) gaps.push("Buyer geography criteria");
+  if (
+    buyer.states.length > 1
+    && buyer.markets.some((market) => normalizeMatchText(market) !== "")
+  ) {
+    gaps.push("State-specific buyer market criteria");
+  }
+  if (
+    buyer.propertyTypes.length === 0
+    || buyer.propertyTypes.some((value) => normalizeMatchText(value) === "")
+  ) {
+    gaps.push("Buyer property type criteria");
+  }
+  if (
+    buyer.minPrice === null && buyer.maxPrice === null
+    || (
+      buyer.minPrice !== null
+      && buyer.maxPrice !== null
+      && buyer.minPrice > buyer.maxPrice
+    )
+  ) {
+    gaps.push("Buyer price criteria");
+  }
+  if (buyer.rehabTolerance.length === 0) {
+    gaps.push("Buyer rehab criteria");
+  }
+  if (buyer.strategies.length === 0) {
+    gaps.push("Buyer exit strategy criteria");
+  }
+  return gaps;
 }
 
 function buyerMatchesDeal(buyer: BuyerRecord, deal: DealRecord): boolean {
@@ -1361,7 +2315,13 @@ function buyerMatchesDeal(buyer: BuyerRecord, deal: DealRecord): boolean {
   const rehab =
     deal.rehabLevel !== null
     && buyer.rehabTolerance.includes(deal.rehabLevel);
-  return geography && propertyType && price && rehab;
+  const strategy = buyer.strategies.some((buyerStrategy) =>
+    deal.strategies.some(
+      (dealStrategy) =>
+        normalizeMatchText(dealStrategy) === normalizeMatchText(buyerStrategy),
+    )
+  );
+  return geography && propertyType && price && rehab && strategy;
 }
 
 function criterion(
@@ -1433,14 +2393,25 @@ function missingFreshness(): DataFreshness {
   return { status: "Missing", lastVerifiedAt: null, ageDays: null };
 }
 
-function assertionHasCompleteProvenance(assertion: SourceAssertion): boolean {
-  return nonblank(assertion.source)
-    && nonblank(assertion.sourceRecordId)
-    && validDate(assertion.retrievedAt)
-    && nonblank(assertion.facts.market)
-    && assertion.usageClassification !== "Restricted — research only"
-    && CONFIDENCE_LEVELS.includes(assertion.confidence)
-    && validDate(assertion.lastVerifiedAt);
+function provenanceGaps(assertion: SourceAssertion | null): string[] {
+  if (assertion === null) return ["Complete authorized provenance"];
+  const gaps: string[] = [];
+  if (!nonblank(assertion.source)) gaps.push("Provenance source");
+  if (!nonblank(assertion.sourceRecordId)) {
+    gaps.push("Provenance source record ID");
+  }
+  if (!validDate(assertion.retrievedAt)) gaps.push("Provenance retrieval date");
+  if (!nonblank(assertion.facts.market)) gaps.push("Provenance market");
+  if (assertion.usageClassification === "Restricted — research only") {
+    gaps.push("Authorized non-restricted usage rights");
+  }
+  if (!CONFIDENCE_LEVELS.includes(assertion.confidence)) {
+    gaps.push("Provenance confidence");
+  }
+  if (!validDate(assertion.lastVerifiedAt)) {
+    gaps.push("Provenance verification date");
+  }
+  return gaps;
 }
 
 function compareAssertions(
@@ -1474,7 +2445,7 @@ function validCurrentDate(
 }
 
 function validFinancialEvidenceValue(
-  key: keyof FinancialQualificationEvidence,
+  key: FinancialNumericEvidenceKey,
   value: number | null | undefined,
 ): boolean {
   if (value === null || value === undefined || !Number.isFinite(value)) {
@@ -1562,6 +2533,28 @@ function nonblank(value: string): boolean {
   return normalizeText(value) !== "";
 }
 
+function restrictionCodeForOwnerStatus(
+  value: string,
+): "Do not contact" | "Identity disputed" | null {
+  const normalized = normalizeMatchText(value);
+  const compact = normalized.replace(/[^\p{L}\p{N}]+/gu, "");
+  if (
+    compact.includes("donotcontact")
+    || compact.includes("optout")
+    || compact.includes("optedout")
+    || /\bdnc\b/u.test(normalized)
+  ) {
+    return "Do not contact";
+  }
+  if (
+    compact.includes("identitydisputed")
+    || compact.includes("identitydispute")
+  ) {
+    return "Identity disputed";
+  }
+  return null;
+}
+
 function validateOptionalMoney(
   value: number | null,
   label: string,
@@ -1612,7 +2605,7 @@ function compareResearchItems(
   left: RankedResearchItem,
   right: RankedResearchItem,
 ): number {
-  const priority = left.researchPriority - right.researchPriority;
+  const priority = right.researchPriority - left.researchPriority;
   if (priority !== 0) return priority;
   if (left.queue === "Scored" && right.queue === "Scored") {
     return compareOpportunity(left, right);

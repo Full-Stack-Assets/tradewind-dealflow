@@ -133,7 +133,7 @@ export type BuyBoxConfig = {
   version: number;
   updatedAt: string;
   states: StateCode[];
-  markets: string[];
+  marketsByState: Record<StateCode, string[]>;
   propertyTypes: string[];
   minPrice: number | null;
   maxPrice: number | null;
