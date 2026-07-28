@@ -16,6 +16,14 @@ export const PIPELINE_STAGES = [
 
 export type PipelineStage = (typeof PIPELINE_STAGES)[number];
 export type RehabLevel = "Light" | "Moderate" | "Heavy";
+export type SourceUsageClassification =
+  | "Public record"
+  | "Licensed provider"
+  | "Direct submission"
+  | "Authorized CRM"
+  | "Operator research"
+  | "Restricted — research only";
+export type DataConfidence = "Low" | "Medium" | "High";
 export type ProofOfFundsStatus =
   | "Not provided"
   | "Pending review"
@@ -42,6 +50,7 @@ export type DealRecord = {
   state: StateCode;
   address: string;
   city: string;
+  market: string;
   propertyType: string;
   source: string;
   ownerContactStatus: string;
@@ -49,12 +58,95 @@ export type DealRecord = {
   nextAction: string;
   notes: string;
   askingPrice: number | null;
-  rehabLevel: RehabLevel;
+  rehabLevel: RehabLevel | null;
+  sourceAssertions: SourceAssertion[];
+  factConflicts: FactConflict[];
+  researchRestrictions: ResearchRestriction[];
   strategies: DealStrategy[];
   executedAgreement: boolean;
   equitableInterestRecorded: boolean;
   legalTitleDisclosureReady: boolean;
   attorneyReviewComplete: boolean;
+};
+
+export type PropertyFactSnapshot = {
+  state: StateCode;
+  address: string;
+  city: string;
+  market: string;
+  propertyType: string;
+  askingPrice: number | null;
+  rehabLevel: RehabLevel | null;
+  ownerContactStatus: string;
+  nextAction: string;
+  notes: string;
+};
+
+export type SourceAssertion = {
+  id: string;
+  source: string;
+  sourceRecordId: string;
+  retrievedAt: string;
+  usageClassification: SourceUsageClassification;
+  confidence: DataConfidence;
+  lastVerifiedAt: string;
+  importedAt: string;
+  fingerprint: string;
+  facts: PropertyFactSnapshot;
+};
+
+export type FactConflict = {
+  id: string;
+  field: keyof PropertyFactSnapshot;
+  canonicalValue: string | number | null;
+  assertedValue: string | number | null;
+  sourceAssertionId: string;
+  detectedAt: string;
+  status: "Unresolved" | "Resolved";
+  resolution: null | {
+    selectedSide: "Canonical" | "Asserted";
+    basis: string;
+    resolvedAt: string;
+  };
+};
+
+export type ResearchRestrictionCode =
+  | "Do not contact"
+  | "Identity disputed"
+  | "Ownership stale"
+  | "Source restricted"
+  | "Specialist review";
+
+export type ResearchRestriction = {
+  id: string;
+  code: ResearchRestrictionCode;
+  source: "Operator" | "Migration" | "Source assertion" | "System";
+  sourceAssertionId: string | null;
+  reason: string;
+  createdAt: string;
+  resolvedAt: string | null;
+  resolutionNote: string;
+};
+
+export type BuyBoxConfig = {
+  configured: boolean;
+  version: number;
+  updatedAt: string;
+  states: StateCode[];
+  markets: string[];
+  propertyTypes: string[];
+  minPrice: number | null;
+  maxPrice: number | null;
+  rehabLevels: RehabLevel[];
+  minimumConfidence: DataConfidence;
+  maxVerificationAgeDays: number;
+  weights: {
+    geography: number;
+    propertyType: number;
+    price: number;
+    rehab: number;
+    dataQuality: number;
+  };
 };
 
 export type BuyerRecord = {
@@ -123,12 +215,14 @@ export type DealDeskDraft = {
 };
 
 export type DealFlowData = {
-  schemaVersion: 1;
+  schemaVersion: 2;
+  revision: number;
   updatedAt: string;
   preferences: {
     selectedState: StateCode | null;
     participationPath: ParticipationPath | null;
   };
+  buyBox: BuyBoxConfig;
   deals: DealRecord[];
   buyers: BuyerRecord[];
   analyses: DealAnalysis[];

@@ -67,7 +67,9 @@ export function matchBuyer(
     conflicts.push("The deal or buyer price range is incomplete.");
   }
 
-  if (buyer.rehabTolerance.includes(deal.rehabLevel)) {
+  if (deal.rehabLevel === null) {
+    conflicts.push("Rehab level is not recorded, so tolerance cannot be evaluated.");
+  } else if (buyer.rehabTolerance.includes(deal.rehabLevel)) {
     score += 15;
     reasons.push(`${deal.rehabLevel} rehab is within tolerance.`);
   } else {
