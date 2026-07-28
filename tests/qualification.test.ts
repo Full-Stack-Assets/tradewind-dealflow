@@ -9,6 +9,7 @@ import {
   rankResearchQueue,
   type QualificationContext,
 } from "../lib/qualification.ts";
+import { adaptQualificationForLaunch } from "../lib/launch-qualification.ts";
 import type {
   BuyBoxConfig,
   BuyerRecord,
@@ -52,6 +53,7 @@ function assertion(
       state: "MA",
       address: "10 Harbor Way",
       city: "Boston",
+      zip: "02110",
       market: "Boston",
       propertyType: "Single-family homes",
       askingPrice: 300_000,
@@ -84,6 +86,7 @@ function completeDeal(overrides: DealOverrides = {}): DealRecord {
     state: "MA",
     address: "10 Harbor Way",
     city: "Boston",
+    zip: "02110",
     market: "Boston",
     propertyType: "Single-family homes",
     source: "City assessor",
@@ -185,11 +188,16 @@ test("default buy box contains the editable operating geography, types, threshol
   assert.equal(result.version, 1);
   assert.deepEqual(result.states, ["MA", "RI"]);
   assert.ok(result.marketsByState.MA.includes("bristol county"));
-  assert.ok(result.marketsByState.RI.includes("providence"));
-  assert.ok(result.marketsByState.MA.includes("fall river"));
-  assert.equal(result.marketsByState.RI.includes("fall river"), false);
-  assert.ok(result.propertyTypes.includes("single-family homes"));
-  assert.ok(result.propertyTypes.includes("small multifamily, 5–12 units — manual review"));
+  assert.deepEqual(result.marketsByState, {
+    MA: ["bristol county"],
+    RI: ["providence county"],
+  });
+  assert.deepEqual(result.propertyTypes, [
+    "duplexes",
+    "four-unit residential",
+    "single-family homes",
+    "triplexes",
+  ]);
   assert.deepEqual(result.financialThresholds, {
     maximumEstimatedValue: 750_000,
     minimumEquityPercent: 30,
@@ -1440,4 +1448,59 @@ test("research queue prioritizes legal risk before lower-impact tasks and keeps 
       },
     ],
   );
+});
+
+test("launch adapter presents five evidence categories and preserves the exact contact block", () => {
+  const result = qualifyDeal(
+    completeDeal({ restriction: "Do not contact" }),
+    configuredBuyBox(),
+    evaluationDate,
+  );
+  const launch = adaptQualificationForLaunch(result);
+
+  assert.equal(launch.status, "Compliance or specialist review");
+  assert.deepEqual(
+    launch.categories.map(({ label }) => label),
+    [
+      "Geography fit",
+      "Property-type fit",
+      "Price and equity fit",
+      "Financial potential",
+      "Data confidence",
+    ],
+  );
+  assert.equal(launch.score, result.score);
+  assert.equal(launch.scoreLabel, result.scoreLabel);
+  assert.equal(launch.contact.blocked, true);
+  assert.equal(launch.contact.state, "Do not contact");
+  assert.match(launch.contact.reason, /do-not-contact/i);
+  assert.equal(launch.nextResearchTask?.category, "Legal/identity risk");
+  assert.equal(launch.sellerFit, "Unassessed");
+});
+
+test("launch adapter labels incomplete evidence as research required without inventing category scores", () => {
+  const result = qualifyDeal(
+    completeDeal({
+      propertyType: "",
+      askingPrice: null,
+      rehabLevel: null,
+      sourceAssertions: [{
+        ...assertion(),
+        confidence: null,
+        lastVerifiedAt: null,
+      }],
+    }),
+    configuredBuyBox(),
+    evaluationDate,
+  );
+  const launch = adaptQualificationForLaunch(result);
+
+  assert.equal(launch.status, "Research required");
+  assert.equal(
+    launch.categories.every(({ score }) => score === null),
+    true,
+  );
+  assert.ok(launch.missingInformation.length > 0);
+  assert.equal(launch.contact.blocked, true);
+  assert.equal(launch.sellerFit, "Unassessed");
 });

@@ -18,13 +18,14 @@ const REQUIRED_HEADERS = [
   "state",
   "address",
   "city",
-  "market",
+  "zip",
   "usage_classification",
-  "confidence",
-  "last_verified_at",
 ] as const;
 
 const OPTIONAL_HEADERS = [
+  "market",
+  "confidence",
+  "last_verified_at",
   "property_type",
   "asking_price",
   "rehab_level",
@@ -34,6 +35,12 @@ const OPTIONAL_HEADERS = [
 ] as const;
 
 const ALLOWED_HEADERS = new Set<string>([...REQUIRED_HEADERS, ...OPTIONAL_HEADERS]);
+const HEADER_ALIASES: Readonly<Record<string, string>> = {
+  retrieved_date: "retrieved_at",
+  property_address: "address",
+  usage_rights: "usage_classification",
+  verification_date: "last_verified_at",
+};
 const PROHIBITED_HEADERS = new Set([
   "race", "racial", "ethnicity", "ethnic", "religion", "religious", "sex", "gender",
   "sexual_orientation", "disability", "age", "date_of_birth", "dob", "marital_status",
@@ -60,6 +67,7 @@ export type LeadImportCandidate = {
   state: StateCode;
   address: string;
   city: string;
+  zip: string;
   market: string;
   propertyType: string | null;
   askingPrice: number | null;
@@ -68,8 +76,8 @@ export type LeadImportCandidate = {
   nextAction: string | null;
   notes: string | null;
   usageClassification: SourceUsageClassification;
-  confidence: DataConfidence;
-  lastVerifiedAt: string;
+  confidence: DataConfidence | null;
+  lastVerifiedAt: string | null;
 };
 
 export type LeadCsvValidationResult =
@@ -112,6 +120,7 @@ export type LeadImportPlan = {
   newRows: PlannedNewLead[];
   changedSourceRows: PlannedSourceUpdate[];
   exactReimports: PreviewItem[];
+  sameFileDuplicates: PreviewItem[];
   possibleDuplicates: PossibleDuplicate[];
   rejected: PreviewItem[];
   attachments: PlannedAttachment[];
@@ -139,6 +148,7 @@ const PROPERTY_FACT_FIELDS: readonly (keyof PropertyFactSnapshot)[] = [
   "state",
   "address",
   "city",
+  "zip",
   "market",
   "propertyType",
   "askingPrice",
@@ -161,14 +171,19 @@ export function validateLeadCsv(table: string[][], now: Date): LeadCsvValidation
     return invalid("CSV exceeds the maximum number of columns.");
   }
 
-  const headers = headerRow.map(normalizeHeader);
+  const normalizedHeaders = headerRow.map(normalizeHeader);
+  const headers = normalizedHeaders.map(
+    (header) => HEADER_ALIASES[header] ?? header,
+  );
   const headerErrors: string[] = [];
   const seen = new Set<string>();
-  for (const header of headers) {
+  for (let index = 0; index < headers.length; index += 1) {
+    const rawHeader = normalizedHeaders[index] ?? "";
+    const header = headers[index] ?? "";
     if (!header) {
       headerErrors.push("CSV contains an empty column header.");
-    } else if (isProhibitedHeader(header)) {
-      headerErrors.push(`CSV contains prohibited column: ${header}.`);
+    } else if (isProhibitedHeader(rawHeader)) {
+      headerErrors.push(`CSV contains prohibited column: ${rawHeader}.`);
     } else if (seen.has(header)) {
       headerErrors.push(`CSV contains duplicate column: ${header}.`);
     } else if (!ALLOWED_HEADERS.has(header)) {
@@ -210,6 +225,7 @@ export function planLeadImport(
     newRows: [],
     changedSourceRows: [],
     exactReimports: [],
+    sameFileDuplicates: [],
     possibleDuplicates: [],
     rejected: [],
     attachments: [],
@@ -254,10 +270,17 @@ export function planLeadImport(
     if (identityMatches && identityMatches.size === 1) {
       const indexed = identityMatches.values().next().value as IndexedTarget;
       if (indexed.fingerprints.has(fingerprint)) {
-        plan.exactReimports.push({
+        const category =
+          indexed.target.kind === "planned"
+            ? plan.sameFileDuplicates
+            : plan.exactReimports;
+        category.push({
           rowNumber,
           candidate,
-          reason: "This exact source snapshot was imported previously.",
+          reason:
+            indexed.target.kind === "planned"
+              ? "This row exactly duplicates an earlier row in the selected file."
+              : "This exact source snapshot was imported previously.",
         });
         return;
       }
@@ -382,6 +405,33 @@ export function attachPossibleDuplicate(
   };
 }
 
+export function holdPossibleDuplicate(
+  plan: LeadImportPlan,
+  rowNumber: number,
+): LeadImportPlan {
+  const possible = plan.possibleDuplicates.find(
+    (item) => item.rowNumber === rowNumber,
+  );
+  if (!possible) {
+    throw new Error("The selected row is not an unresolved possible duplicate.");
+  }
+  return {
+    ...plan,
+    possibleDuplicates: plan.possibleDuplicates.filter(
+      (item) => item.rowNumber !== rowNumber,
+    ),
+    rejected: [
+      ...plan.rejected,
+      {
+        rowNumber,
+        candidate: possible.candidate,
+        reason:
+          "This possible property match was held outside production pending identity review.",
+      },
+    ],
+  };
+}
+
 export function applyLeadImportPlan(
   data: DealFlowData,
   plan: LeadImportPlan,
@@ -393,11 +443,18 @@ export function applyLeadImportPlan(
   ) {
     return { ok: false, error: STALE_PLAN_ERROR };
   }
-  if (!hasValidPlannedRowMap(plan)) {
+  if (plan.possibleDuplicates.length > 0) {
     return {
       ok: false,
       error:
-        "Planned row numbers must be unique and planned references must be valid.",
+        "Possible property matches must be attached or held outside production before apply.",
+    };
+  }
+  if (!hasValidPlanRowIntegrity(plan)) {
+    return {
+      ok: false,
+      error:
+        "Import preview row integrity failed; planned row numbers must be unique and planned references must be valid.",
     };
   }
   if (planSplitsSourceIdentity(data, plan)) {
@@ -431,6 +488,7 @@ export function applyLeadImportPlan(
       state: facts.state,
       address: facts.address,
       city: facts.city,
+      zip: facts.zip,
       market: facts.market,
       propertyType: facts.propertyType,
       source: assertion.source,
@@ -539,6 +597,45 @@ export function resolveFactConflict(
   return next;
 }
 
+export function resolveResearchRestriction(
+  data: DealFlowData,
+  dealId: string,
+  restrictionId: string,
+  datedReason: string,
+  now: Date,
+): DealFlowData {
+  const normalizedReason = normalizeText(datedReason);
+  if (!containsValidReviewDate(normalizedReason, now)) {
+    throw new Error(
+      "A dated reason using YYYY-MM-DD is required to resolve this restriction.",
+    );
+  }
+  const next = structuredClone(data);
+  const deal = next.deals.find((candidateDeal) => candidateDeal.id === dealId);
+  if (!deal) throw new Error("The selected deal does not exist.");
+  const restriction = deal.researchRestrictions.find(
+    (candidateRestriction) => candidateRestriction.id === restrictionId,
+  );
+  if (!restriction) throw new Error("The selected restriction does not exist.");
+  if (
+    restriction.source !== "Operator" &&
+    restriction.source !== "Migration"
+  ) {
+    throw new Error(
+      "A source-derived restriction cannot be resolved from this control.",
+    );
+  }
+  if (restriction.resolvedAt !== null) {
+    throw new Error("The selected restriction is already resolved.");
+  }
+  const resolvedAt = now.toISOString();
+  restriction.resolvedAt = resolvedAt;
+  restriction.resolutionNote = normalizedReason;
+  deal.updatedAt = resolvedAt;
+  next.updatedAt = resolvedAt;
+  return next;
+}
+
 function appendAssertion(
   deal: DealRecord,
   candidate: LeadImportCandidate,
@@ -570,7 +667,10 @@ function createSourceAssertion(
     retrievedAt: normalizeTimestamp(candidate.retrievedAt),
     usageClassification: candidate.usageClassification,
     confidence: candidate.confidence,
-    lastVerifiedAt: normalizeTimestamp(candidate.lastVerifiedAt),
+    lastVerifiedAt:
+      candidate.lastVerifiedAt === null
+        ? null
+        : normalizeTimestamp(candidate.lastVerifiedAt),
     importedAt,
     fingerprint,
     facts: factsFromCandidate(candidate),
@@ -585,6 +685,7 @@ function addFactConflicts(
   for (const field of PROPERTY_FACT_FIELDS) {
     const canonicalValue = deal[field];
     const assertedValue = assertion.facts[field];
+    if (assertedValue === null || assertedValue === "") continue;
     if (canonicalJson(canonicalValue) === canonicalJson(assertedValue)) continue;
     const duplicate = deal.factConflicts.some(
       (conflict) =>
@@ -662,6 +763,7 @@ function factsFromCandidate(
     state: candidate.state,
     address: normalizeText(candidate.address),
     city: normalizeText(candidate.city),
+    zip: normalizeText(candidate.zip),
     market: normalizeText(candidate.market),
     propertyType: normalizeText(candidate.propertyType ?? ""),
     askingPrice: candidate.askingPrice,
@@ -690,7 +792,10 @@ function fingerprintCandidate(candidate: LeadImportCandidate): string {
         candidate.sourceRecordId,
       ),
       retrievedAt: normalizeTimestamp(candidate.retrievedAt),
-      lastVerifiedAt: normalizeTimestamp(candidate.lastVerifiedAt),
+      lastVerifiedAt:
+        candidate.lastVerifiedAt === null
+          ? null
+          : normalizeTimestamp(candidate.lastVerifiedAt),
       usageClassification: candidate.usageClassification,
       confidence: candidate.confidence,
       facts: normalizedFacts,
@@ -819,7 +924,24 @@ function assertAttachmentIdentityIsUnambiguous(
   }
 }
 
-function hasValidPlannedRowMap(plan: LeadImportPlan): boolean {
+function hasValidPlanRowIntegrity(plan: LeadImportPlan): boolean {
+  const allRows = [
+    ...plan.newRows,
+    ...plan.changedSourceRows,
+    ...plan.exactReimports,
+    ...plan.sameFileDuplicates,
+    ...plan.possibleDuplicates,
+    ...plan.rejected,
+    ...plan.attachments,
+  ].map(({ rowNumber }) => rowNumber);
+  if (
+    allRows.some(
+      (rowNumber) => !Number.isInteger(rowNumber) || rowNumber < 2,
+    ) ||
+    new Set(allRows).size !== allRows.length
+  ) {
+    return false;
+  }
   const plannedRows = new Set<number>();
   for (const item of plan.newRows) {
     if (
@@ -838,6 +960,14 @@ function hasValidPlannedRowMap(plan: LeadImportPlan): boolean {
     if (hasExistingTarget === hasPlannedTarget) return false;
     if (plannedTarget === null) return true;
     return plannedRows.has(plannedTarget);
+  });
+}
+
+function containsValidReviewDate(value: string, now: Date): boolean {
+  const matches = value.match(/\b\d{4}-\d{2}-\d{2}\b/gu) ?? [];
+  return matches.some((date) => {
+    const parsed = parseImportDate(date, now);
+    return parsed.ok;
   });
 }
 
@@ -975,6 +1105,7 @@ function setCanonicalFact(
       return;
     case "address":
     case "city":
+    case "zip":
     case "market":
     case "propertyType":
     case "ownerContactStatus":
@@ -995,26 +1126,46 @@ function validateRow(values: Record<string, string>, rowNumber: number, now: Dat
   const state = required("state");
   const address = required("address");
   const city = required("city");
-  const market = required("market");
+  const zip = required("zip");
   const usageClassification = required("usage_classification");
-  const confidence = required("confidence");
-  const lastVerifiedAt = required("last_verified_at");
-  for (const [header, value] of Object.entries({ source, source_record_id: sourceRecordId, retrieved_at: retrievedAt, state, address, city, market, usage_classification: usageClassification, confidence, last_verified_at: lastVerifiedAt })) {
+  for (const [header, value] of Object.entries({
+    source,
+    source_record_id: sourceRecordId,
+    retrieved_at: retrievedAt,
+    state,
+    address,
+    city,
+    zip,
+    usage_classification: usageClassification,
+  })) {
     if (value === null) return rowError(rowNumber, header, "is required");
   }
   if (
     source === null || sourceRecordId === null || retrievedAt === null || state === null ||
-    address === null || city === null || market === null || usageClassification === null ||
-    confidence === null || lastVerifiedAt === null
+    address === null || city === null || zip === null || usageClassification === null
   ) return rowError(rowNumber, "required field", "is required");
 
   const normalizedRetrievedAt = parseImportDate(retrievedAt, now);
   if (!normalizedRetrievedAt.ok) return rowError(rowNumber, "retrieved_at", normalizedRetrievedAt.error);
-  const normalizedLastVerifiedAt = parseImportDate(lastVerifiedAt, now);
-  if (!normalizedLastVerifiedAt.ok) return rowError(rowNumber, "last_verified_at", normalizedLastVerifiedAt.error);
+  const lastVerifiedAt = optionalText(values.last_verified_at);
+  const normalizedLastVerifiedAt =
+    lastVerifiedAt === null ? null : parseImportDate(lastVerifiedAt, now);
+  if (normalizedLastVerifiedAt !== null && !normalizedLastVerifiedAt.ok) {
+    return rowError(
+      rowNumber,
+      "last_verified_at",
+      normalizedLastVerifiedAt.error,
+    );
+  }
   if (state !== "MA" && state !== "RI") return rowError(rowNumber, "state", "has an invalid value");
   if (!USAGE_CLASSIFICATIONS.includes(usageClassification as SourceUsageClassification)) return rowError(rowNumber, "usage_classification", "has an invalid value");
-  if (!CONFIDENCES.includes(confidence as DataConfidence)) return rowError(rowNumber, "confidence", "has an invalid value");
+  const confidence = optionalText(values.confidence);
+  if (
+    confidence !== null &&
+    !CONFIDENCES.includes(confidence as DataConfidence)
+  ) {
+    return rowError(rowNumber, "confidence", "has an invalid value");
+  }
 
   const askingPrice = optionalText(values.asking_price);
   let parsedPrice: number | null = null;
@@ -1034,7 +1185,8 @@ function validateRow(values: Record<string, string>, rowNumber: number, now: Dat
     state,
     address,
     city,
-    market,
+    zip,
+    market: optionalText(values.market) ?? "",
     propertyType: optionalText(values.property_type),
     askingPrice: parsedPrice,
     rehabLevel: rehabLevel as RehabLevel | null,
@@ -1042,8 +1194,8 @@ function validateRow(values: Record<string, string>, rowNumber: number, now: Dat
     nextAction: optionalText(values.next_action),
     notes: optionalText(values.notes),
     usageClassification: usageClassification as SourceUsageClassification,
-    confidence: confidence as DataConfidence,
-    lastVerifiedAt: normalizedLastVerifiedAt.value,
+    confidence: confidence as DataConfidence | null,
+    lastVerifiedAt: normalizedLastVerifiedAt?.value ?? null,
   };
 }
 

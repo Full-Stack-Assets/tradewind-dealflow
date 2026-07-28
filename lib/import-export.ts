@@ -48,8 +48,47 @@ const RESTRICTION_CODES: ResearchRestrictionCode[] = [
   "Do not contact", "Identity disputed", "Ownership stale", "Source restricted",
   "Specialist review",
 ];
+const LEGACY_MARKETS_BY_STATE: Record<StateCode, Set<string>> = {
+  MA: new Set([
+    "bristol county",
+    "plymouth county",
+    "norfolk county",
+    "worcester county",
+    "providence-border communities",
+    "fall river",
+    "new bedford",
+    "taunton",
+    "attleboro",
+    "brockton",
+    "wareham",
+    "dartmouth",
+    "fairhaven",
+    "seekonk",
+    "swansea",
+    "somerset",
+    "rehoboth",
+  ]),
+  RI: new Set([
+    "providence county",
+    "kent county",
+    "bristol county",
+    "providence",
+    "pawtucket",
+    "central falls",
+    "cranston",
+    "warwick",
+    "east providence",
+    "woonsocket",
+    "johnston",
+    "north providence",
+    "west warwick",
+    "coventry",
+    "bristol",
+    "warren",
+  ]),
+};
 
-type DealRecordV1 = Omit<DealRecord, "market" | "sourceAssertions" | "factConflicts" | "researchRestrictions"> & {
+type DealRecordV1 = Omit<DealRecord, "zip" | "market" | "sourceAssertions" | "factConflicts" | "researchRestrictions"> & {
   rehabLevel: RehabLevel;
 };
 
@@ -112,6 +151,9 @@ function validRehab(value: unknown): value is RehabLevel { return value === "Lig
 function validStrategy(value: unknown): value is DealStrategy { return DEAL_STRATEGIES.includes(value as DealStrategy); }
 function validProofOfFundsStatus(value: unknown): value is ProofOfFundsStatus { return PROOF_OF_FUNDS_STATUSES.includes(value as ProofOfFundsStatus); }
 function validConfidence(value: unknown): value is DataConfidence { return DATA_CONFIDENCES.includes(value as DataConfidence); }
+function validNullableConfidence(value: unknown): value is DataConfidence | null {
+  return value === null || validConfidence(value);
+}
 function validUsageClassification(value: unknown): value is SourceUsageClassification { return SOURCE_USAGE_CLASSIFICATIONS.includes(value as SourceUsageClassification); }
 function validRestrictionCode(value: unknown): value is ResearchRestrictionCode { return RESTRICTION_CODES.includes(value as ResearchRestrictionCode); }
 function validPipelineStage(value: unknown): value is PipelineStage { return PIPELINE_STAGES.includes(value as PipelineStage); }
@@ -180,11 +222,12 @@ function reconstructDealV1(raw: unknown): DealRecordV1 | null {
 }
 
 function reconstructPropertyFacts(raw: unknown): PropertyFactSnapshot | null {
-  const fields = ["state", "address", "city", "market", "propertyType", "askingPrice", "rehabLevel", "ownerContactStatus", "nextAction", "notes"];
+  const fields = ["state", "address", "city", "zip", "market", "propertyType", "askingPrice", "rehabLevel", "ownerContactStatus", "nextAction", "notes"];
   if (!isRecord(raw) || !hasOnlyKeys(raw, fields)) return null;
-  if (!validState(raw.state) || !validString(raw.address) || !validString(raw.city) || !validString(raw.market) || !validString(raw.propertyType) || !validNullableNonnegativeNumber(raw.askingPrice) || (raw.rehabLevel !== null && !validRehab(raw.rehabLevel)) || !validString(raw.ownerContactStatus) || !validString(raw.nextAction) || !validString(raw.notes)) return null;
+  const zip = raw.zip === undefined ? "" : raw.zip;
+  if (!validState(raw.state) || !validString(raw.address) || !validString(raw.city) || !validString(zip) || !validString(raw.market) || !validString(raw.propertyType) || !validNullableNonnegativeNumber(raw.askingPrice) || (raw.rehabLevel !== null && !validRehab(raw.rehabLevel)) || !validString(raw.ownerContactStatus) || !validString(raw.nextAction) || !validString(raw.notes)) return null;
   return {
-    state: raw.state, address: trimmed(raw.address), city: trimmed(raw.city), market: trimmed(raw.market), propertyType: trimmed(raw.propertyType),
+    state: raw.state, address: trimmed(raw.address), city: trimmed(raw.city), zip: trimmed(zip), market: trimmed(raw.market), propertyType: trimmed(raw.propertyType),
     askingPrice: raw.askingPrice, rehabLevel: raw.rehabLevel, ownerContactStatus: trimmed(raw.ownerContactStatus), nextAction: trimmed(raw.nextAction), notes: trimmed(raw.notes),
   };
 }
@@ -193,13 +236,13 @@ function reconstructSourceAssertion(raw: unknown): SourceAssertion | null {
   const fields = ["id", "source", "sourceRecordId", "retrievedAt", "usageClassification", "confidence", "lastVerifiedAt", "importedAt", "fingerprint", "facts"];
   if (!isRecord(raw) || !hasOnlyKeys(raw, fields)) return null;
   const facts = reconstructPropertyFacts(raw.facts);
-  if (!validString(raw.id) || !validString(raw.source) || !validString(raw.sourceRecordId) || !validString(raw.retrievedAt) || !validUsageClassification(raw.usageClassification) || !validConfidence(raw.confidence) || !validString(raw.lastVerifiedAt) || !validString(raw.importedAt) || !validString(raw.fingerprint) || facts === null) return null;
+  if (!validString(raw.id) || !validString(raw.source) || !validString(raw.sourceRecordId) || !validString(raw.retrievedAt) || !validUsageClassification(raw.usageClassification) || !validNullableConfidence(raw.confidence) || (raw.lastVerifiedAt !== null && !validString(raw.lastVerifiedAt)) || !validString(raw.importedAt) || !validString(raw.fingerprint) || facts === null) return null;
   return { id: raw.id, source: trimmed(raw.source), sourceRecordId: trimmed(raw.sourceRecordId), retrievedAt: raw.retrievedAt, usageClassification: raw.usageClassification, confidence: raw.confidence, lastVerifiedAt: raw.lastVerifiedAt, importedAt: raw.importedAt, fingerprint: raw.fingerprint, facts };
 }
 
 function reconstructFactConflict(raw: unknown): FactConflict | null {
   const fields = ["id", "field", "canonicalValue", "assertedValue", "sourceAssertionId", "detectedAt", "status", "resolution"];
-  if (!isRecord(raw) || !hasOnlyKeys(raw, fields) || !validString(raw.id) || !validString(raw.field) || !["state", "address", "city", "market", "propertyType", "askingPrice", "rehabLevel", "ownerContactStatus", "nextAction", "notes"].includes(raw.field) || !validScalar(raw.canonicalValue) || !validScalar(raw.assertedValue) || !validString(raw.sourceAssertionId) || !validString(raw.detectedAt) || (raw.status !== "Unresolved" && raw.status !== "Resolved")) return null;
+  if (!isRecord(raw) || !hasOnlyKeys(raw, fields) || !validString(raw.id) || !validString(raw.field) || !["state", "address", "city", "zip", "market", "propertyType", "askingPrice", "rehabLevel", "ownerContactStatus", "nextAction", "notes"].includes(raw.field) || !validScalar(raw.canonicalValue) || !validScalar(raw.assertedValue) || !validString(raw.sourceAssertionId) || !validString(raw.detectedAt) || (raw.status !== "Unresolved" && raw.status !== "Resolved")) return null;
   if (raw.resolution === null) return { id: raw.id, field: raw.field as keyof PropertyFactSnapshot, canonicalValue: raw.canonicalValue, assertedValue: raw.assertedValue, sourceAssertionId: raw.sourceAssertionId, detectedAt: raw.detectedAt, status: raw.status, resolution: null };
   if (!isRecord(raw.resolution) || !hasOnlyKeys(raw.resolution, ["selectedSide", "basis", "resolvedAt"]) || (raw.resolution.selectedSide !== "Canonical" && raw.resolution.selectedSide !== "Asserted") || !validString(raw.resolution.basis) || !validString(raw.resolution.resolvedAt)) return null;
   return { id: raw.id, field: raw.field as keyof PropertyFactSnapshot, canonicalValue: raw.canonicalValue, assertedValue: raw.assertedValue, sourceAssertionId: raw.sourceAssertionId, detectedAt: raw.detectedAt, status: raw.status, resolution: { selectedSide: raw.resolution.selectedSide, basis: trimmed(raw.resolution.basis), resolvedAt: raw.resolution.resolvedAt } };
@@ -213,9 +256,10 @@ function reconstructResearchRestriction(raw: unknown): ResearchRestriction | nul
 }
 
 function reconstructDealV2(raw: unknown): DealRecord | null {
-  const fields = ["id", "createdAt", "updatedAt", "state", "address", "city", "market", "propertyType", "source", "ownerContactStatus", "stage", "nextAction", "notes", "askingPrice", "rehabLevel", "sourceAssertions", "factConflicts", "researchRestrictions", "strategies", "executedAgreement", "equitableInterestRecorded", "legalTitleDisclosureReady", "attorneyReviewComplete"];
+  const fields = ["id", "createdAt", "updatedAt", "state", "address", "city", "zip", "market", "propertyType", "source", "ownerContactStatus", "stage", "nextAction", "notes", "askingPrice", "rehabLevel", "sourceAssertions", "factConflicts", "researchRestrictions", "strategies", "executedAgreement", "equitableInterestRecorded", "legalTitleDisclosureReady", "attorneyReviewComplete"];
   if (!isRecord(raw) || !hasOnlyKeys(raw, fields)) return null;
-  if (!validString(raw.id) || !validString(raw.createdAt) || !validString(raw.updatedAt) || !validState(raw.state) || !validString(raw.address) || !validString(raw.city) || !validString(raw.market) || !validString(raw.propertyType) || !validString(raw.source) || !validString(raw.ownerContactStatus) || !validPipelineStage(raw.stage) || !validString(raw.nextAction) || !validString(raw.notes) || !validNullableNonnegativeNumber(raw.askingPrice) || (raw.rehabLevel !== null && !validRehab(raw.rehabLevel)) || !validArray(raw.sourceAssertions) || !validArray(raw.factConflicts) || !validArray(raw.researchRestrictions) || !validArray(raw.strategies) || !raw.strategies.every(validStrategy) || typeof raw.executedAgreement !== "boolean" || typeof raw.equitableInterestRecorded !== "boolean" || typeof raw.legalTitleDisclosureReady !== "boolean" || typeof raw.attorneyReviewComplete !== "boolean") return null;
+  const zip = raw.zip === undefined ? "" : raw.zip;
+  if (!validString(raw.id) || !validString(raw.createdAt) || !validString(raw.updatedAt) || !validState(raw.state) || !validString(raw.address) || !validString(raw.city) || !validString(zip) || !validString(raw.market) || !validString(raw.propertyType) || !validString(raw.source) || !validString(raw.ownerContactStatus) || !validPipelineStage(raw.stage) || !validString(raw.nextAction) || !validString(raw.notes) || !validNullableNonnegativeNumber(raw.askingPrice) || (raw.rehabLevel !== null && !validRehab(raw.rehabLevel)) || !validArray(raw.sourceAssertions) || !validArray(raw.factConflicts) || !validArray(raw.researchRestrictions) || !validArray(raw.strategies) || !raw.strategies.every(validStrategy) || typeof raw.executedAgreement !== "boolean" || typeof raw.equitableInterestRecorded !== "boolean" || typeof raw.legalTitleDisclosureReady !== "boolean" || typeof raw.attorneyReviewComplete !== "boolean") return null;
   const sourceAssertions = raw.sourceAssertions.map(reconstructSourceAssertion);
   const factConflicts = raw.factConflicts.map(reconstructFactConflict);
   const researchRestrictions = raw.researchRestrictions.map(reconstructResearchRestriction);
@@ -229,7 +273,7 @@ function reconstructDealV2(raw: unknown): DealRecord | null {
     )
   ) return null;
   return {
-    id: raw.id, createdAt: raw.createdAt, updatedAt: raw.updatedAt, state: raw.state, address: trimmed(raw.address), city: trimmed(raw.city), market: trimmed(raw.market), propertyType: trimmed(raw.propertyType), source: trimmed(raw.source), ownerContactStatus: trimmed(raw.ownerContactStatus), stage: raw.stage, nextAction: trimmed(raw.nextAction), notes: trimmed(raw.notes), askingPrice: raw.askingPrice, rehabLevel: raw.rehabLevel,
+    id: raw.id, createdAt: raw.createdAt, updatedAt: raw.updatedAt, state: raw.state, address: trimmed(raw.address), city: trimmed(raw.city), zip: trimmed(zip), market: trimmed(raw.market), propertyType: trimmed(raw.propertyType), source: trimmed(raw.source), ownerContactStatus: trimmed(raw.ownerContactStatus), stage: raw.stage, nextAction: trimmed(raw.nextAction), notes: trimmed(raw.notes), askingPrice: raw.askingPrice, rehabLevel: raw.rehabLevel,
     sourceAssertions: sourceAssertions as SourceAssertion[], factConflicts: factConflicts as FactConflict[], researchRestrictions: researchRestrictions as ResearchRestriction[], strategies: raw.strategies.slice(),
     executedAgreement: raw.executedAgreement, equitableInterestRecorded: raw.equitableInterestRecorded, legalTitleDisclosureReady: raw.legalTitleDisclosureReady, attorneyReviewComplete: raw.attorneyReviewComplete,
   };
@@ -390,8 +434,14 @@ function migrateLegacyMarketsByState(
 ): BuyBoxConfig["marketsByState"] | null {
   const result: BuyBoxConfig["marketsByState"] = { MA: [], RI: [] };
   const defaultSets = {
-    MA: new Set(defaults.marketsByState.MA),
-    RI: new Set(defaults.marketsByState.RI),
+    MA: new Set([
+      ...defaults.marketsByState.MA,
+      ...LEGACY_MARKETS_BY_STATE.MA,
+    ]),
+    RI: new Set([
+      ...defaults.marketsByState.RI,
+      ...LEGACY_MARKETS_BY_STATE.RI,
+    ]),
   };
   for (const rawMarket of markets) {
     const market = rawMarket.normalize("NFKC").trim().replace(/\s+/gu, " ").toLowerCase();
@@ -473,7 +523,7 @@ export function migrateV1(value: DealFlowDataV1, now: Date): DealFlowData {
     );
     return {
       id: deal.id, createdAt: deal.createdAt, updatedAt: deal.updatedAt, state: deal.state,
-      address: deal.address, city: deal.city, market: "", propertyType: deal.propertyType,
+      address: deal.address, city: deal.city, zip: "", market: "", propertyType: deal.propertyType,
       source: deal.source, ownerContactStatus: deal.ownerContactStatus, stage: deal.stage,
       nextAction: deal.nextAction, notes: deal.notes, askingPrice: deal.askingPrice,
       rehabLevel: deal.rehabLevel, sourceAssertions: [], factConflicts: [],
@@ -540,7 +590,7 @@ function csvCell(value: string | number | null): string {
 }
 
 export function serializePipelineCsv(deals: DealRecord[]): string {
-  const header = ["State", "Property address", "City", "Property type", "Source", "Owner contact status", "Stage", "Asking price", "Next action", "Notes"];
-  const rows = deals.map((deal) => [deal.state, deal.address, deal.city, deal.propertyType, deal.source, deal.ownerContactStatus, deal.stage, deal.askingPrice, deal.nextAction, deal.notes]);
+  const header = ["State", "Property address", "City", "ZIP", "Property type", "Source", "Owner contact status", "Stage", "Asking price", "Next action", "Notes"];
+  const rows = deals.map((deal) => [deal.state, deal.address, deal.city, deal.zip, deal.propertyType, deal.source, deal.ownerContactStatus, deal.stage, deal.askingPrice, deal.nextAction, deal.notes]);
   return [header, ...rows].map((row) => row.map((value) => csvCell(value)).join(",")).join("\n");
 }

@@ -31,49 +31,15 @@ const COMPONENT_LABELS: Record<QualificationComponentKey, string> = {
 };
 const DEFAULT_MA_MARKETS = [
   "Bristol County",
-  "Plymouth County",
-  "Norfolk County",
-  "Worcester County",
-  "Providence-border communities",
-  "Fall River",
-  "New Bedford",
-  "Taunton",
-  "Attleboro",
-  "Brockton",
-  "Wareham",
-  "Dartmouth",
-  "Fairhaven",
-  "Seekonk",
-  "Swansea",
-  "Somerset",
-  "Rehoboth",
 ];
 const DEFAULT_RI_MARKETS = [
   "Providence County",
-  "Kent County",
-  "Bristol County",
-  "Providence",
-  "Pawtucket",
-  "Central Falls",
-  "Cranston",
-  "Warwick",
-  "East Providence",
-  "Woonsocket",
-  "Johnston",
-  "North Providence",
-  "West Warwick",
-  "Coventry",
-  "Bristol",
-  "Warren",
 ];
 const DEFAULT_PROPERTY_TYPES = [
   "Single-family homes",
   "Duplexes",
   "Triplexes",
   "Four-unit residential",
-  "Small multifamily, 5–12 units — manual review",
-  "Vacant residential land — manual review",
-  "Mixed-use — manual review",
 ];
 
 export type QualificationStatus =
@@ -2371,11 +2337,13 @@ function withinOptionalBounds(
 }
 
 function evaluateFreshness(
-  value: string | undefined,
+  value: string | null | undefined,
   evaluationDate: Date,
   maxAgeDays: number,
 ): DataFreshness {
-  if (value === undefined || !validDate(value)) return missingFreshness();
+  if (value === undefined || value === null || !validDate(value)) {
+    return missingFreshness();
+  }
   const timestamp = Date.parse(value);
   const age = evaluationDate.getTime() - timestamp;
   if (age < 0) {
@@ -2405,10 +2373,16 @@ function provenanceGaps(assertion: SourceAssertion | null): string[] {
   if (assertion.usageClassification === "Restricted — research only") {
     gaps.push("Authorized non-restricted usage rights");
   }
-  if (!CONFIDENCE_LEVELS.includes(assertion.confidence)) {
+  if (
+    assertion.confidence === null ||
+    !CONFIDENCE_LEVELS.includes(assertion.confidence)
+  ) {
     gaps.push("Provenance confidence");
   }
-  if (!validDate(assertion.lastVerifiedAt)) {
+  if (
+    assertion.lastVerifiedAt === null ||
+    !validDate(assertion.lastVerifiedAt)
+  ) {
     gaps.push("Provenance verification date");
   }
   return gaps;
@@ -2419,7 +2393,8 @@ function compareAssertions(
   right: SourceAssertion,
 ): number {
   const verified =
-    sortableDate(right.lastVerifiedAt) - sortableDate(left.lastVerifiedAt);
+    sortableDate(right.lastVerifiedAt ?? "") -
+    sortableDate(left.lastVerifiedAt ?? "");
   if (verified !== 0) return verified;
   const retrieved =
     sortableDate(right.retrievedAt) - sortableDate(left.retrievedAt);

@@ -13,26 +13,33 @@ import {
 import {
   applyLeadImportPlan,
   attachPossibleDuplicate,
+  holdPossibleDuplicate,
   planLeadImport,
   resolveFactConflict,
+  resolveResearchRestriction,
   validateLeadCsv,
   type LeadImportCandidate,
 } from "../lib/lead-ingestion.ts";
-import { createEmptyData } from "../lib/import-export.ts";
+import {
+  createEmptyData,
+  serializeData,
+  validateImport,
+} from "../lib/import-export.ts";
 import type { DealFlowData } from "../lib/types.ts";
 
 const fixedNow = new Date("2026-07-28T12:00:00Z");
 const requiredHeaders = [
   "source",
   "source_record_id",
-  "retrieved_at",
+  "retrieved_date",
   "state",
-  "address",
+  "property_address",
   "city",
+  "zip",
+  "usage_rights",
   "market",
-  "usage_classification",
   "confidence",
-  "last_verified_at",
+  "verification_date",
 ];
 const validRow = [
   "City Assessor",
@@ -41,8 +48,9 @@ const validRow = [
   "MA",
   "10 Harbor Way",
   "Boston",
-  "Suffolk",
+  "02110",
   "Public record",
+  "Suffolk",
   "Medium",
   "2026-07-21T10:30:00-04:00",
 ];
@@ -70,6 +78,7 @@ function candidate(
     state: "MA",
     address: "10 Harbor Way",
     city: "Boston",
+    zip: "02110",
     market: "Suffolk",
     propertyType: "Single-family",
     askingPrice: 425_000,
@@ -183,9 +192,16 @@ test("lead validation rejects protected, sensitive, duplicate, and unknown heade
   const duplicate = validateLeadCsv(validTable(["Source Record Id"], ["002"]), fixedNow);
   assert.equal(duplicate.ok, false);
   assert.match(duplicate.errors[0] ?? "", /duplicate column/i);
+
+  const aliasDuplicate = validateLeadCsv(
+    validTable(["retrieved_at"], ["2026-07-20"]),
+    fixedNow,
+  );
+  assert.equal(aliasDuplicate.ok, false);
+  assert.match(aliasDuplicate.errors[0] ?? "", /duplicate column/i);
 });
 
-test("lead validation preserves leading-zero source IDs and normalizes dates", () => {
+test("launch header aliases preserve leading-zero source IDs, ZIP, and normalized dates", () => {
   const result = validateLeadCsv(validTable(), fixedNow);
   assert.equal(result.ok, true);
   assert.deepEqual(result.candidates, [{
@@ -195,6 +211,7 @@ test("lead validation preserves leading-zero source IDs and normalizes dates", (
     state: "MA",
     address: "10 Harbor Way",
     city: "Boston",
+    zip: "02110",
     market: "Suffolk",
     propertyType: null,
     askingPrice: null,
@@ -208,11 +225,107 @@ test("lead validation preserves leading-zero source IDs and normalizes dates", (
   }]);
 });
 
+test("minimal launch rows keep optional market, confidence, and verification unknown", () => {
+  const result = validateLeadCsv(
+    [[
+      "source",
+      "source_record_id",
+      "retrieved_date",
+      "usage_rights",
+      "property_address",
+      "city",
+      "state",
+      "zip",
+    ], [
+      "City Assessor",
+      "0007",
+      "2026-07-20",
+      "Public record",
+      "18 Bay Street",
+      "Fall River",
+      "MA",
+      "02720",
+    ]],
+    fixedNow,
+  );
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.candidates[0], {
+    source: "City Assessor",
+    sourceRecordId: "0007",
+    retrievedAt: "2026-07-20T00:00:00.000Z",
+    state: "MA",
+    address: "18 Bay Street",
+    city: "Fall River",
+    zip: "02720",
+    market: "",
+    propertyType: null,
+    askingPrice: null,
+    rehabLevel: null,
+    ownerContactStatus: null,
+    nextAction: null,
+    notes: null,
+    usageClassification: "Public record",
+    confidence: null,
+    lastVerifiedAt: null,
+  });
+});
+
+test("canonical intake header aliases remain accepted while ZIP stays required", () => {
+  const canonical = validateLeadCsv(
+    [[
+      "source",
+      "source_record_id",
+      "retrieved_at",
+      "usage_classification",
+      "address",
+      "city",
+      "state",
+      "zip",
+    ], [
+      "Authorized list",
+      "001",
+      "2026-07-20",
+      "Authorized CRM",
+      "10 Harbor Way",
+      "Boston",
+      "MA",
+      "02110",
+    ]],
+    fixedNow,
+  );
+  assert.equal(canonical.ok, true);
+
+  const missingZip = validateLeadCsv(
+    [[
+      "source",
+      "source_record_id",
+      "retrieved_date",
+      "usage_rights",
+      "property_address",
+      "city",
+      "state",
+    ], [
+      "Authorized list",
+      "001",
+      "2026-07-20",
+      "Authorized CRM",
+      "10 Harbor Way",
+      "Boston",
+      "MA",
+    ]],
+    fixedNow,
+  );
+  assert.equal(missingZip.ok, false);
+  assert.match(missingZip.errors[0] ?? "", /missing required column: zip/i);
+});
+
 test("lead validation rejects impossible, timezone-less, and future dates", () => {
   for (const [column, value] of [
-    ["retrieved_at", "2026-02-30"],
-    ["last_verified_at", "2026-07-21T10:30:00"],
-    ["retrieved_at", "2026-07-29"],
+    ["retrieved_date", "2026-02-30"],
+    ["verification_date", "2026-07-21T10:30:00"],
+    ["retrieved_date", "2026-07-29"],
   ]) {
     const table = validTable();
     table[1][table[0].indexOf(column)] = value;
@@ -225,7 +338,7 @@ test("lead validation rejects impossible, timezone-less, and future dates", () =
 test("lead validation rejects invalid enum values and negative asking prices", () => {
   for (const [column, value] of [
     ["state", "CT"],
-    ["usage_classification", "MLS"],
+    ["usage_rights", "MLS"],
     ["confidence", "Certain"],
   ]) {
     const table = validTable();
@@ -276,6 +389,37 @@ test("lead validation accepts optional property facts when present", () => {
   });
 });
 
+test("estimated value is not silently reinterpreted as asking price", () => {
+  const result = validateLeadCsv(
+    validTable(["estimated_value"], ["425000"]),
+    fixedNow,
+  );
+  assert.equal(result.ok, false);
+  assert.match(result.errors[0] ?? "", /unknown column: estimated_value/i);
+});
+
+test("ZIP and unknown verification metadata survive serialization, restore, and exact reimport", () => {
+  const minimal = candidate({
+    sourceRecordId: "zip-round-trip",
+    zip: "02720",
+    market: "",
+    confidence: null,
+    lastVerifiedAt: null,
+  });
+  const imported = importCandidates(emptyWorkspace(), [minimal]);
+  const restored = validateImport(JSON.parse(serializeData(imported)), fixedNow);
+
+  assert.equal(restored.ok, true);
+  if (!restored.ok) return;
+  assert.equal(restored.data.deals[0]?.zip, "02720");
+  assert.equal(restored.data.deals[0]?.sourceAssertions[0]?.facts.zip, "02720");
+  assert.equal(restored.data.deals[0]?.sourceAssertions[0]?.confidence, null);
+  assert.equal(restored.data.deals[0]?.sourceAssertions[0]?.lastVerifiedAt, null);
+  const reimport = planLeadImport(restored.data, [minimal]);
+  assert.equal(reimport.exactReimports.length, 1);
+  assert.equal(reimport.changedSourceRows.length, 0);
+});
+
 test("reimport is idempotent and changed snapshots preserve canonical facts", () => {
   const first = importCandidates(
     emptyWorkspace(),
@@ -299,6 +443,31 @@ test("reimport is idempotent and changed snapshots preserve canonical facts", ()
   assert.equal(applied.data.deals[0]?.address, "10 Harbor Way");
   assert.equal(applied.data.deals[0]?.sourceAssertions.length, 2);
   assert.equal(applied.data.deals[0]?.factConflicts[0]?.field, "address");
+});
+
+test("unknown optional facts in a new snapshot do not contradict known canonical facts", () => {
+  const first = importCandidates(
+    emptyWorkspace(),
+    [candidate({ propertyType: "Single-family", market: "Bristol County" })],
+  );
+  const changed = candidate({
+    retrievedAt: "2026-07-28T00:00:00.000Z",
+    lastVerifiedAt: null,
+    propertyType: null,
+    market: "",
+  });
+  const applied = applyLeadImportPlan(
+    first,
+    planLeadImport(first, [changed]),
+    fixedNow,
+  );
+
+  assert.equal(applied.ok, true);
+  if (!applied.ok) return;
+  assert.equal(applied.data.deals[0]?.sourceAssertions.length, 2);
+  assert.equal(applied.data.deals[0]?.factConflicts.length, 0);
+  assert.equal(applied.data.deals[0]?.propertyType, "Single-family");
+  assert.equal(applied.data.deals[0]?.market, "Bristol County");
 });
 
 test("stale plan and intra-file possible duplicates do not write", () => {
@@ -353,6 +522,16 @@ test("ambiguous source identities already attached to multiple deals are rejecte
   if (!applied.ok) return;
   assert.equal(applied.data.deals[0]?.sourceAssertions.length, 1);
   assert.equal(applied.data.deals[1]?.sourceAssertions.length, 1);
+});
+
+test("an exact duplicate within one selected file has its own preview category", () => {
+  const repeated = candidate({ sourceRecordId: "same-file-exact" });
+  const plan = planLeadImport(emptyWorkspace(), [repeated, repeated]);
+
+  assert.equal(plan.newRows.length, 1);
+  assert.equal(plan.sameFileDuplicates.length, 1);
+  assert.equal(plan.exactReimports.length, 0);
+  assert.equal(plan.sameFileDuplicates[0]?.rowNumber, 3);
 });
 
 test("historical fingerprints stay idempotent while verification-only refreshes are retained", () => {
@@ -418,6 +597,57 @@ test("possible duplicates require explicit attachment to a listed existing deal"
   ]);
   assert.equal(unitPlan.possibleDuplicates.length, 0);
   assert.equal(unitPlan.newRows.length, 1);
+});
+
+test("possible duplicates can be explicitly held outside production while safe rows apply", () => {
+  const first = importCandidates(emptyWorkspace(), [candidate()]);
+  const plan = planLeadImport(first, [
+    candidate({
+      source: "County Records",
+      sourceRecordId: "possible",
+    }),
+    candidate({
+      source: "County Records",
+      sourceRecordId: "new-property",
+      address: "22 Harbor Way",
+      zip: "02111",
+    }),
+  ]);
+  assert.equal(plan.possibleDuplicates.length, 1);
+  assert.equal(plan.newRows.length, 1);
+
+  const held = holdPossibleDuplicate(plan, 2);
+  assert.equal(held.possibleDuplicates.length, 0);
+  assert.equal(held.rejected.length, 1);
+  assert.match(held.rejected[0]?.reason ?? "", /held outside production/i);
+
+  const applied = applyLeadImportPlan(first, held, fixedNow);
+  assert.equal(applied.ok, true);
+  if (!applied.ok) return;
+  assert.equal(applied.data.deals.length, 2);
+  assert.equal(
+    applied.data.deals.some(({ address }) => address === "22 Harbor Way"),
+    true,
+  );
+});
+
+test("apply rejects a row duplicated across preview categories", () => {
+  const data = emptyWorkspace();
+  const plan = planLeadImport(data, [
+    candidate({ sourceRecordId: "safe-new" }),
+  ]);
+  const planned = plan.newRows[0];
+  assert.ok(planned);
+  plan.rejected.push({
+    rowNumber: planned.rowNumber,
+    candidate: structuredClone(planned.candidate),
+    reason: "Crafted duplicate category",
+  });
+
+  const applied = applyLeadImportPlan(data, plan, fixedNow);
+  assert.equal(applied.ok, false);
+  if (!applied.ok) assert.match(applied.error, /preview row integrity/i);
+  assert.equal(data.deals.length, 0);
 });
 
 test("cross-row source identities with disjoint duplicate targets are rejected", () => {
@@ -730,4 +960,68 @@ test("conflict resolution preserves assertions and validates typed asserted valu
     basis: "Verified against the recorded source",
     resolvedAt: "2026-07-28T12:00:00.000Z",
   });
+});
+
+test("restriction resolution preserves history and cannot resolve source-derived holds", () => {
+  const restricted = importCandidates(emptyWorkspace(), [
+    candidate({ usageClassification: "Restricted — research only" }),
+  ]);
+  const sourceRestriction = restricted.deals[0]?.researchRestrictions[0];
+  assert.ok(sourceRestriction);
+  assert.throws(
+    () => resolveResearchRestriction(
+      restricted,
+      restricted.deals[0]?.id ?? "",
+      sourceRestriction.id,
+      "Reviewed on 2026-07-28",
+      fixedNow,
+    ),
+    /source-derived restriction/i,
+  );
+
+  const withOperatorHold = structuredClone(restricted);
+  withOperatorHold.deals[0]?.researchRestrictions.push({
+    id: "operator-hold",
+    code: "Specialist review",
+    source: "Operator",
+    sourceAssertionId: null,
+    reason: "Operator review",
+    createdAt: "2026-07-27T00:00:00.000Z",
+    resolvedAt: null,
+    resolutionNote: "",
+  });
+  assert.throws(
+    () => resolveResearchRestriction(
+      withOperatorHold,
+      withOperatorHold.deals[0]?.id ?? "",
+      "operator-hold",
+      " ",
+      fixedNow,
+    ),
+    /dated reason/i,
+  );
+
+  const resolved = resolveResearchRestriction(
+    withOperatorHold,
+    withOperatorHold.deals[0]?.id ?? "",
+    "operator-hold",
+    "Resolved after attorney review on 2026-07-28",
+    fixedNow,
+  );
+  assert.equal(resolved.deals[0]?.researchRestrictions.length, 2);
+  assert.deepEqual(
+    resolved.deals[0]?.researchRestrictions.find(
+      ({ id }) => id === "operator-hold",
+    ),
+    {
+      id: "operator-hold",
+      code: "Specialist review",
+      source: "Operator",
+      sourceAssertionId: null,
+      reason: "Operator review",
+      createdAt: "2026-07-27T00:00:00.000Z",
+      resolvedAt: "2026-07-28T12:00:00.000Z",
+      resolutionNote: "Resolved after attorney review on 2026-07-28",
+    },
+  );
 });

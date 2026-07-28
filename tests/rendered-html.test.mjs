@@ -103,6 +103,22 @@ test("pages with multiple guarded actions do not reuse accessible IDs", async ()
   assert.deepEqual([...new Set(duplicates)], []);
 });
 
+test("pipeline renders the local lead engine and hard action boundaries", async () => {
+  const response = await render("/pipeline");
+  const html = await response.text();
+
+  assert.match(html, /Authorized CSV intake/i);
+  assert.match(html, /Configure launch buy box/i);
+  assert.match(html, /The selected file stays in this browser/i);
+  assert.match(html, /Apply safe records/i);
+  assert.match(html, /A score never authorizes contact/i);
+  assert.match(html, /No real property records yet/i);
+  assert.doesNotMatch(
+    html,
+    /Send campaign|Text owner|Email owner|Autodial|Upload property CSV/i,
+  );
+});
+
 test("health endpoint reports the honest local-first release state", async () => {
   const response = await render("/healthz");
   assert.equal(response.status, 200);

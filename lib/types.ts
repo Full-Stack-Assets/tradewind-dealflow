@@ -50,6 +50,7 @@ export type DealRecord = {
   state: StateCode;
   address: string;
   city: string;
+  zip: string;
   market: string;
   propertyType: string;
   source: string;
@@ -73,6 +74,7 @@ export type PropertyFactSnapshot = {
   state: StateCode;
   address: string;
   city: string;
+  zip: string;
   market: string;
   propertyType: string;
   askingPrice: number | null;
@@ -88,8 +90,8 @@ export type SourceAssertion = {
   sourceRecordId: string;
   retrievedAt: string;
   usageClassification: SourceUsageClassification;
-  confidence: DataConfidence;
-  lastVerifiedAt: string;
+  confidence: DataConfidence | null;
+  lastVerifiedAt: string | null;
   importedAt: string;
   fingerprint: string;
   facts: PropertyFactSnapshot;

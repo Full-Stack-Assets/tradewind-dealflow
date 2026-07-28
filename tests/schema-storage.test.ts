@@ -95,6 +95,7 @@ test("v1 migration preserves DNC and never invents provenance", () => {
   if (!result.ok) return;
   assert.equal(result.data.schemaVersion, 2);
   assert.equal(result.data.deals[0]?.rehabLevel, "Moderate");
+  assert.equal(result.data.deals[0]?.zip, "");
   assert.deepEqual(result.data.deals[0]?.sourceAssertions, []);
   assert.equal(
     result.data.deals[0]?.researchRestrictions[0]?.code,
@@ -103,6 +104,73 @@ test("v1 migration preserves DNC and never invents provenance", () => {
   assert.equal(
     result.data.deals[0]?.researchRestrictions[0]?.createdAt,
     "2026-07-27T12:00:00.000Z",
+  );
+});
+
+test("older version-2 records migrate with blank ZIP and no fabricated source facts", () => {
+  const candidate = createEmptyData("2026-07-27T12:00:00.000Z") as unknown as {
+    deals: Array<Record<string, unknown>>;
+  };
+  candidate.deals.push({
+    id: "legacy-v2-deal",
+    createdAt: "2026-07-27T12:00:00.000Z",
+    updatedAt: "2026-07-27T12:00:00.000Z",
+    state: "MA",
+    address: "10 Harbor Way",
+    city: "Boston",
+    market: "",
+    propertyType: "",
+    source: "Municipal assessor",
+    ownerContactStatus: "Not researched",
+    stage: "Research",
+    nextAction: "Verify ownership",
+    notes: "",
+    askingPrice: null,
+    rehabLevel: null,
+    sourceAssertions: [{
+      id: "legacy-assertion",
+      source: "Municipal assessor",
+      sourceRecordId: "001",
+      retrievedAt: "2026-07-20T00:00:00.000Z",
+      usageClassification: "Public record",
+      confidence: "Medium",
+      lastVerifiedAt: "2026-07-21T00:00:00.000Z",
+      importedAt: "2026-07-21T01:00:00.000Z",
+      fingerprint: "legacy-fingerprint",
+      facts: {
+        state: "MA",
+        address: "10 Harbor Way",
+        city: "Boston",
+        market: "",
+        propertyType: "",
+        askingPrice: null,
+        rehabLevel: null,
+        ownerContactStatus: "Not researched",
+        nextAction: "Verify ownership",
+        notes: "",
+      },
+    }],
+    factConflicts: [],
+    researchRestrictions: [],
+    strategies: [],
+    executedAgreement: false,
+    equitableInterestRecorded: false,
+    legalTitleDisclosureReady: false,
+    attorneyReviewComplete: false,
+  });
+
+  const result = validateImport(candidate);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.data.deals[0]?.zip, "");
+  assert.equal(result.data.deals[0]?.sourceAssertions[0]?.facts.zip, "");
+  assert.equal(
+    result.data.deals[0]?.sourceAssertions[0]?.confidence,
+    "Medium",
+  );
+  assert.equal(
+    result.data.deals[0]?.sourceAssertions[0]?.lastVerifiedAt,
+    "2026-07-21T00:00:00.000Z",
   );
 });
 
@@ -131,6 +199,7 @@ test("v2 validation rejects contact holds that are not represented by an active 
       state: "MA",
       address: "10 Harbor Way",
       city: "Boston",
+      zip: "02110",
       market: "Boston",
       propertyType: "Single-family homes",
       source: "Municipal assessor",
@@ -255,6 +324,7 @@ test("pipeline CSV neutralizes spreadsheet formulas", () => {
     state: "MA",
     address: '=HYPERLINK("bad")',
     city: "Boston",
+    zip: "02110",
     market: "Boston",
     propertyType: "Single-family",
     source: "Municipal assessor",
