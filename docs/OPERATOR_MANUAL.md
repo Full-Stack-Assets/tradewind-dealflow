@@ -84,6 +84,11 @@ loading boundary and withholds configuration, counts, priorities, and write
 claims. If storage is corrupt or unavailable, those facts remain `Not enough
 data`; open Pipeline to use the existing restore or clear controls.
 
+An invalid or oversized proposed change is rejected without changing the
+trusted snapshot; it does not by itself remove write capability. Missing Web
+Locks, corrupt or unavailable storage, and an actual quota/write failure stay
+fail-closed.
+
 It is not a historical daily report. The local schema does not retain an event
 ledger, import batches, prior score results, or “what changed” history.
 Freshness and research priority use the Dashboard page-load date. Reload the

@@ -7,10 +7,7 @@ import {
   type QualificationResult,
   type ResearchPriorityLabel,
 } from "./qualification.ts";
-import type {
-  MutationResult,
-  StorageReadResult,
-} from "./local-storage.ts";
+import type { MutationResult, StorageReadResult } from "./local-storage.ts";
 import type { DealFlowData } from "./types.ts";
 
 const LAUNCH_STATUSES: LaunchQualificationStatus[] = [
@@ -60,9 +57,8 @@ export type LeadOperatingSnapshot = {
   researchItems: LeadResearchItem[];
 };
 
-type LeadDashboardStorageStatus =
-  | StorageReadResult["status"]
-  | Exclude<MutationResult, { ok: true }>["code"];
+type LeadDashboardMutationIssue =
+  Exclude<MutationResult, { ok: true }>["code"];
 
 export type LeadDashboardAccess = {
   state: "loading" | "ready" | "corrupt" | "unavailable";
@@ -72,11 +68,13 @@ export type LeadDashboardAccess = {
 
 export function resolveLeadDashboardAccess({
   hydrated,
-  storageStatus,
+  storageReadStatus,
+  mutationIssue,
   writesSupported,
 }: {
   hydrated: boolean;
-  storageStatus: LeadDashboardStorageStatus;
+  storageReadStatus: StorageReadResult["status"];
+  mutationIssue: LeadDashboardMutationIssue | null;
   writesSupported: boolean;
 }): LeadDashboardAccess {
   if (!hydrated) {
@@ -86,24 +84,26 @@ export function resolveLeadDashboardAccess({
       safeWritesAvailable: false,
     };
   }
-  if (storageStatus === "corrupt" || storageStatus === "unavailable") {
+  if (storageReadStatus === "corrupt" || mutationIssue === "corrupt") {
     return {
-      state: storageStatus,
+      state: "corrupt",
       snapshotAvailable: false,
       safeWritesAvailable: false,
     };
   }
-
-  const trustedWritableStatus = [
-    "empty",
-    "current",
-    "legacy",
-    "recovered-legacy",
-  ].includes(storageStatus);
+  if (mutationIssue === "unavailable") {
+    return {
+      state: "unavailable",
+      snapshotAvailable: false,
+      safeWritesAvailable: false,
+    };
+  }
+  const writeCapabilityBlocked =
+    mutationIssue === "unsupported-lock" || mutationIssue === "quota";
   return {
     state: "ready",
     snapshotAvailable: true,
-    safeWritesAvailable: writesSupported && trustedWritableStatus,
+    safeWritesAvailable: writesSupported && !writeCapabilityBlocked,
   };
 }
 

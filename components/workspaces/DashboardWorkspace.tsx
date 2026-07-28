@@ -27,6 +27,8 @@ export function DashboardWorkspace() {
   const {
     data,
     hydrated,
+    storageReadStatus,
+    storageMutationIssue,
     storageStatus,
     storageMessage,
     writesSupported,
@@ -34,7 +36,8 @@ export function DashboardWorkspace() {
   const evaluationDate = useMemo(() => new Date(), []);
   const access = resolveLeadDashboardAccess({
     hydrated,
-    storageStatus,
+    storageReadStatus,
+    mutationIssue: storageMutationIssue,
     writesSupported,
   });
   const snapshot = useMemo(

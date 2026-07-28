@@ -40,6 +40,10 @@ type DataContextValue = {
   ) => Promise<MutationResult>;
   replaceData: (next: DealFlowData) => Promise<MutationResult>;
   clearData: () => Promise<MutationResult>;
+  storageReadStatus: StorageReadResult["status"];
+  storageMutationIssue:
+    | Exclude<MutationResult, { ok: true }>["code"]
+    | null;
   storageStatus: StorageStatus;
   storageMessage: string | null;
   writesSupported: boolean;
@@ -221,6 +225,8 @@ export function LocalDataProvider({ children }: { children: ReactNode }) {
       updateData,
       replaceData,
       clearData,
+      storageReadStatus: readResult.status,
+      storageMutationIssue: mutationIssue?.code ?? null,
       storageStatus,
       storageMessage,
       writesSupported,
@@ -230,8 +236,10 @@ export function LocalDataProvider({ children }: { children: ReactNode }) {
       data,
       hydrated,
       replaceData,
+      readResult.status,
       storageMessage,
       storageStatus,
+      mutationIssue?.code,
       updateData,
       writesSupported,
     ],

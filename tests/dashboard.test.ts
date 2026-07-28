@@ -105,7 +105,8 @@ test("pre-hydration dashboard access withholds snapshots and write claims", () =
   assert.deepEqual(
     resolveLeadDashboardAccess({
       hydrated: false,
-      storageStatus: "empty",
+      storageReadStatus: "empty",
+      mutationIssue: null,
       writesSupported: true,
     }),
     {
@@ -117,17 +118,47 @@ test("pre-hydration dashboard access withholds snapshots and write claims", () =
 });
 
 test("corrupt or unavailable storage withholds factual dashboard output", () => {
-  for (const storageStatus of ["corrupt", "unavailable"] as const) {
+  assert.deepEqual(
+    resolveLeadDashboardAccess({
+      hydrated: true,
+      storageReadStatus: "corrupt",
+      mutationIssue: null,
+      writesSupported: true,
+    }),
+    {
+      state: "corrupt",
+      snapshotAvailable: false,
+      safeWritesAvailable: false,
+    },
+  );
+  assert.deepEqual(
+    resolveLeadDashboardAccess({
+      hydrated: true,
+      storageReadStatus: "current",
+      mutationIssue: "unavailable",
+      writesSupported: true,
+    }),
+    {
+      state: "unavailable",
+      snapshotAvailable: false,
+      safeWritesAvailable: false,
+    },
+  );
+});
+
+test("rejected invalid or oversized candidates do not erase write capability", () => {
+  for (const mutationIssue of ["invalid", "too-large"] as const) {
     assert.deepEqual(
       resolveLeadDashboardAccess({
         hydrated: true,
-        storageStatus,
+        storageReadStatus: "current",
+        mutationIssue,
         writesSupported: true,
       }),
       {
-        state: storageStatus,
-        snapshotAvailable: false,
-        safeWritesAvailable: false,
+        state: "ready",
+        snapshotAvailable: true,
+        safeWritesAvailable: true,
       },
     );
   }
@@ -137,7 +168,8 @@ test("trusted hydration permits snapshots but write claims stay fail-closed", ()
   assert.deepEqual(
     resolveLeadDashboardAccess({
       hydrated: true,
-      storageStatus: "current",
+      storageReadStatus: "current",
+      mutationIssue: null,
       writesSupported: true,
     }),
     {
@@ -149,8 +181,22 @@ test("trusted hydration permits snapshots but write claims stay fail-closed", ()
   assert.deepEqual(
     resolveLeadDashboardAccess({
       hydrated: true,
-      storageStatus: "unsupported-lock",
+      storageReadStatus: "current",
+      mutationIssue: "unsupported-lock",
       writesSupported: false,
+    }),
+    {
+      state: "ready",
+      snapshotAvailable: true,
+      safeWritesAvailable: false,
+    },
+  );
+  assert.deepEqual(
+    resolveLeadDashboardAccess({
+      hydrated: true,
+      storageReadStatus: "current",
+      mutationIssue: "quota",
+      writesSupported: true,
     }),
     {
       state: "ready",
