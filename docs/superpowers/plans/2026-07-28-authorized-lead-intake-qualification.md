@@ -8,6 +8,30 @@
 
 **Tech Stack:** TypeScript 5.9, React 19, Next.js 16/vinext, browser localStorage and Web Locks, Node’s built-in test runner, semantic HTML/CSS, Sites hosting.
 
+## Fast-track amendment — 2026-07-28
+
+The active objective is now Milestone 1 of the owner-operated revenue loop:
+authorized CSV intake, provenance and duplicate safety, one buy box,
+transparent qualification, research prioritization, focused release
+verification, and exact private deployment. Finish this milestone before
+seller, buyer, underwriting, approval, closing, backend, or provider work.
+
+Tasks 1–5 were already complete or in their final corrective verification when
+this amendment arrived. Preserve that tested work, but do not extend its
+complexity. In Task 6, present the launch qualification model through five
+operator categories: geography fit, property-type fit, price and equity fit,
+financial potential, and data confidence. Return Qualified, Possible,
+Research required, Disqualified, or Compliance or specialist review; always
+show reasons, unknowns, next research action, and the contact block.
+
+For Tasks 6–8, the exact current scope and deferrals in
+`.superpowers/sdd/2026-07-28-authorized-lead-intake-qualification/fast-track-directive.md`
+override any broader step below. The narrower launch geography is Bristol
+County, Massachusetts, and Providence County, Rhode Island; launch property
+types are single-family and two- through four-family residential. Existing
+configuration may retain future placeholders, but the first interface does not
+build their operating workflows.
+
 ## Global Constraints
 
 - Production contains no fabricated property, seller, buyer, testimonial, activity, revenue, or performance data.
