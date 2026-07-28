@@ -420,6 +420,106 @@ test("possible duplicates require explicit attachment to a listed existing deal"
   assert.equal(unitPlan.newRows.length, 1);
 });
 
+test("cross-row source identities with disjoint duplicate targets are rejected", () => {
+  const first = importCandidates(emptyWorkspace(), [candidate()]);
+  const data = importCandidates(first, [
+    candidate({
+      sourceRecordId: "002",
+      address: "20 Harbor Way",
+    }),
+  ]);
+  const plan = planLeadImport(data, [
+    candidate({
+      source: "County Records",
+      sourceRecordId: "shared-id",
+      address: "10 Harbor Way",
+    }),
+    candidate({
+      source: "County Records",
+      sourceRecordId: "shared-id",
+      address: "20 Harbor Way",
+    }),
+  ]);
+
+  assert.equal(plan.possibleDuplicates.length, 0);
+  assert.deepEqual(plan.rejected.map((item) => item.rowNumber), [2, 3]);
+  assert.match(plan.rejected[0]?.reason ?? "", /multiple target properties/i);
+});
+
+test("attachment rejects a crafted cross-row identity with different targets", () => {
+  const first = importCandidates(emptyWorkspace(), [candidate()]);
+  const data = importCandidates(first, [
+    candidate({
+      sourceRecordId: "002",
+      address: "20 Harbor Way",
+    }),
+  ]);
+  const legacyPlan = planLeadImport(data, [
+    candidate({
+      source: "County Records",
+      sourceRecordId: "county-10",
+      address: "10 Harbor Way",
+    }),
+    candidate({
+      source: "County Records",
+      sourceRecordId: "county-20",
+      address: "20 Harbor Way",
+    }),
+  ]);
+  const crafted = structuredClone(legacyPlan);
+  const second = crafted.possibleDuplicates[1];
+  assert.ok(second);
+  second.candidate.sourceRecordId = "county-10";
+
+  assert.throws(
+    () => attachPossibleDuplicate(
+      crafted,
+      2,
+      data.deals[0]?.id ?? "",
+    ),
+    /source identity.*multiple target properties/i,
+  );
+});
+
+test("apply rejects a crafted plan that splits one source identity across deals", () => {
+  const first = importCandidates(emptyWorkspace(), [candidate()]);
+  const data = importCandidates(first, [
+    candidate({
+      sourceRecordId: "002",
+      address: "20 Harbor Way",
+    }),
+  ]);
+  const crafted = planLeadImport(data, []);
+  crafted.attachments.push(
+    {
+      rowNumber: 2,
+      candidate: candidate({
+        source: "County Records",
+        sourceRecordId: "shared-id",
+        address: "10 Harbor Way",
+      }),
+      dealId: data.deals[0]?.id ?? "",
+    },
+    {
+      rowNumber: 3,
+      candidate: candidate({
+        source: "County Records",
+        sourceRecordId: "shared-id",
+        address: "20 Harbor Way",
+      }),
+      dealId: data.deals[1]?.id ?? "",
+    },
+  );
+
+  const applied = applyLeadImportPlan(data, crafted, fixedNow);
+  assert.equal(applied.ok, false);
+  if (!applied.ok) {
+    assert.match(applied.error, /source identity.*multiple target properties/i);
+  }
+  assert.equal(data.deals[0]?.sourceAssertions.length, 1);
+  assert.equal(data.deals[1]?.sourceAssertions.length, 1);
+});
+
 test("source identity normalization collapses internal whitespace", () => {
   const first = importCandidates(emptyWorkspace(), [candidate()]);
   const plan = planLeadImport(first, [
@@ -494,7 +594,7 @@ test("restricted assertions create related holds and new deals enter only Resear
   assert.equal(deal.researchRestrictions[0]?.source, "Source assertion");
 });
 
-test("repeated disagreements retain assertions without duplicating fact conflicts", () => {
+test("fresh repeated disagreements retain source-linked fact conflicts", () => {
   const first = importCandidates(emptyWorkspace(), [candidate()]);
   const changed = importCandidates(first, [
     candidate({
@@ -510,8 +610,51 @@ test("repeated disagreements retain assertions without duplicating fact conflict
   ]);
 
   assert.equal(refreshed.deals[0]?.sourceAssertions.length, 3);
-  assert.equal(refreshed.deals[0]?.factConflicts.length, 1);
+  assert.equal(refreshed.deals[0]?.factConflicts.length, 2);
   assert.equal(refreshed.deals[0]?.factConflicts[0]?.field, "address");
+  assert.equal(
+    refreshed.deals[0]?.factConflicts[1]?.sourceAssertionId,
+    refreshed.deals[0]?.sourceAssertions[2]?.id,
+  );
+});
+
+test("fresh disagreeing assertions get new unresolved evidence after resolution", () => {
+  const first = importCandidates(emptyWorkspace(), [candidate()]);
+  const changed = importCandidates(first, [
+    candidate({
+      address: "12 Harbor Way",
+      lastVerifiedAt: "2026-07-27T00:00:00.000Z",
+    }),
+  ]);
+  const deal = changed.deals[0];
+  const conflict = deal?.factConflicts[0];
+  assert.ok(deal);
+  assert.ok(conflict);
+  const resolved = resolveFactConflict(
+    changed,
+    deal.id,
+    conflict.id,
+    "Canonical",
+    "Kept the independently verified canonical address",
+    fixedNow,
+  );
+  const refreshed = importCandidates(resolved, [
+    candidate({
+      address: "12 Harbor Way",
+      lastVerifiedAt: "2026-07-28T00:00:00.000Z",
+    }),
+  ]);
+  const refreshedDeal = refreshed.deals[0];
+  const newestAssertion = refreshedDeal?.sourceAssertions.at(-1);
+  const newestConflict = refreshedDeal?.factConflicts.at(-1);
+
+  assert.equal(refreshedDeal?.factConflicts.length, 2);
+  assert.equal(newestConflict?.status, "Unresolved");
+  assert.equal(newestConflict?.sourceAssertionId, newestAssertion?.id);
+  assert.equal(
+    new Set(refreshedDeal?.factConflicts.map((item) => item.id)).size,
+    2,
+  );
 });
 
 test("conflict resolution preserves assertions and validates typed asserted values", () => {

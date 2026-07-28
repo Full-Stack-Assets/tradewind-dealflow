@@ -130,6 +130,11 @@ type IndexedTarget = {
   fingerprints: Set<string>;
 };
 
+type PendingPossibleIdentity = {
+  rowNumber: number;
+  targetKeys: Set<string>;
+};
+
 const PROPERTY_FACT_FIELDS: readonly (keyof PropertyFactSnapshot)[] = [
   "state",
   "address",
@@ -211,6 +216,11 @@ export function planLeadImport(
   };
   const identities = new Map<string, Map<string, IndexedTarget>>();
   const properties = new Map<string, Map<string, ImportTarget>>();
+  const pendingPossibleIdentities = new Map<
+    string,
+    PendingPossibleIdentity[]
+  >();
+  const blockedPossibleIdentities = new Set<string>();
 
   for (const deal of data.deals) {
     addPropertyTarget(properties, propertyKeyFromDeal(deal), {
@@ -263,7 +273,52 @@ export function planLeadImport(
       return;
     }
 
+    if (blockedPossibleIdentities.has(identity)) {
+      plan.rejected.push({
+        rowNumber,
+        candidate,
+        reason:
+          "This source identity resolves to multiple target properties in the same file.",
+      });
+      return;
+    }
+
     const propertyMatches = properties.get(propertyKeyFromCandidate(candidate));
+    const pending = pendingPossibleIdentities.get(identity) ?? [];
+    const candidateTargetKeys = new Set(
+      propertyMatches && propertyMatches.size > 0
+        ? propertyMatches.keys()
+        : [`planned:${rowNumber}`],
+    );
+    if (
+      pending.length > 0 &&
+      sharedTargetKeys(pending, candidateTargetKeys).size === 0
+    ) {
+      const pendingRows = new Set(pending.map((item) => item.rowNumber));
+      const blockedItems = plan.possibleDuplicates.filter((item) =>
+        pendingRows.has(item.rowNumber)
+      );
+      plan.possibleDuplicates = plan.possibleDuplicates.filter(
+        (item) => !pendingRows.has(item.rowNumber),
+      );
+      for (const item of blockedItems) {
+        plan.rejected.push({
+          rowNumber: item.rowNumber,
+          candidate: item.candidate,
+          reason:
+            "This source identity resolves to multiple target properties in the same file.",
+        });
+      }
+      plan.rejected.push({
+        rowNumber,
+        candidate,
+        reason:
+          "This source identity resolves to multiple target properties in the same file.",
+      });
+      pendingPossibleIdentities.delete(identity);
+      blockedPossibleIdentities.add(identity);
+      return;
+    }
     if (propertyMatches && propertyMatches.size > 0) {
       const targets = [...propertyMatches.values()];
       plan.possibleDuplicates.push({
@@ -278,6 +333,10 @@ export function planLeadImport(
           target.kind === "planned" ? [target.rowNumber] : []
         ),
       });
+      pendingPossibleIdentities.set(identity, [
+        ...pending,
+        { rowNumber, targetKeys: candidateTargetKeys },
+      ]);
       return;
     }
 
@@ -310,6 +369,7 @@ export function attachPossibleDuplicate(
       "A possible duplicate can attach only to a listed existing deal.",
     );
   }
+  assertAttachmentIdentityIsUnambiguous(plan, possible, dealId);
   return {
     ...plan,
     possibleDuplicates: plan.possibleDuplicates.filter(
@@ -332,6 +392,13 @@ export function applyLeadImportPlan(
     fingerprintWorkspace(data) !== plan.workspaceFingerprint
   ) {
     return { ok: false, error: STALE_PLAN_ERROR };
+  }
+  if (planSplitsSourceIdentity(data, plan)) {
+    return {
+      ok: false,
+      error:
+        "A source identity cannot resolve to multiple target properties in one import.",
+    };
   }
 
   const next = structuredClone(data);
@@ -515,10 +582,7 @@ function addFactConflicts(
     const duplicate = deal.factConflicts.some(
       (conflict) =>
         conflict.field === field &&
-        canonicalJson(conflict.canonicalValue) ===
-          canonicalJson(canonicalValue) &&
-        canonicalJson(conflict.assertedValue) ===
-          canonicalJson(assertedValue),
+        conflict.sourceAssertionId === assertion.id,
     );
     if (duplicate) continue;
     const identity = canonicalJson({
@@ -526,6 +590,7 @@ function addFactConflicts(
       field,
       canonicalValue,
       assertedValue,
+      sourceAssertionId: assertion.id,
     });
     const conflict: FactConflict = {
       id: stableId("conflict", identity),
@@ -674,6 +739,111 @@ function addPropertyTarget(
   const targets = index.get(property) ?? new Map<string, ImportTarget>();
   targets.set(targetKey(target), target);
   index.set(property, targets);
+}
+
+function sharedTargetKeys(
+  pending: PendingPossibleIdentity[],
+  candidateTargetKeys: Set<string>,
+): Set<string> {
+  let shared = new Set(candidateTargetKeys);
+  for (const item of pending) {
+    shared = new Set([...shared].filter((key) => item.targetKeys.has(key)));
+  }
+  return shared;
+}
+
+function assertAttachmentIdentityIsUnambiguous(
+  plan: LeadImportPlan,
+  selected: PossibleDuplicate,
+  dealId: string,
+): void {
+  const identity = sourceIdentity(
+    selected.candidate.source,
+    selected.candidate.sourceRecordId,
+  );
+  const conflictsWithSelectedDeal = (
+    candidate: LeadImportCandidate,
+    targetDealId: string | null,
+    targetPlannedRow: number | null,
+  ): boolean =>
+    sourceIdentity(candidate.source, candidate.sourceRecordId) === identity &&
+    (targetDealId !== dealId || targetPlannedRow !== null);
+
+  const attachmentConflict = plan.attachments.some((item) =>
+    conflictsWithSelectedDeal(item.candidate, item.dealId, null)
+  );
+  const changedSourceConflict = plan.changedSourceRows.some((item) =>
+    conflictsWithSelectedDeal(
+      item.candidate,
+      item.dealId,
+      item.plannedDealRowNumber,
+    )
+  );
+  const newRowConflict = plan.newRows.some(
+    (item) =>
+      sourceIdentity(item.candidate.source, item.candidate.sourceRecordId) ===
+      identity,
+  );
+  const possibleConflict = plan.possibleDuplicates.some(
+    (item) =>
+      item.rowNumber !== selected.rowNumber &&
+      sourceIdentity(item.candidate.source, item.candidate.sourceRecordId) ===
+        identity &&
+      !item.matchingDealIds.includes(dealId),
+  );
+  if (
+    attachmentConflict ||
+    changedSourceConflict ||
+    newRowConflict ||
+    possibleConflict
+  ) {
+    throw new Error(
+      "This source identity resolves to multiple target properties in the import plan.",
+    );
+  }
+}
+
+function planSplitsSourceIdentity(
+  data: DealFlowData,
+  plan: LeadImportPlan,
+): boolean {
+  const targetsByIdentity = new Map<string, Set<string>>();
+  const addTarget = (
+    candidate: Pick<LeadImportCandidate, "source" | "sourceRecordId">,
+    target: string,
+  ): boolean => {
+    const identity = sourceIdentity(candidate.source, candidate.sourceRecordId);
+    const targets = targetsByIdentity.get(identity) ?? new Set<string>();
+    targets.add(target);
+    targetsByIdentity.set(identity, targets);
+    return targets.size > 1;
+  };
+
+  for (const deal of data.deals) {
+    for (const assertion of deal.sourceAssertions) {
+      const identity = sourceIdentity(
+        assertion.source,
+        assertion.sourceRecordId,
+      );
+      const targets = targetsByIdentity.get(identity) ?? new Set<string>();
+      targets.add(`existing:${deal.id}`);
+      targetsByIdentity.set(identity, targets);
+    }
+  }
+
+  for (const item of plan.newRows) {
+    if (addTarget(item.candidate, `planned:${item.rowNumber}`)) return true;
+  }
+  for (const item of plan.changedSourceRows) {
+    const target = item.dealId
+      ? `existing:${item.dealId}`
+      : `planned:${item.plannedDealRowNumber ?? "missing"}`;
+    if (addTarget(item.candidate, target)) return true;
+  }
+  for (const item of plan.attachments) {
+    if (addTarget(item.candidate, `existing:${item.dealId}`)) return true;
+  }
+  return false;
 }
 
 function targetKey(target: ImportTarget): string {
