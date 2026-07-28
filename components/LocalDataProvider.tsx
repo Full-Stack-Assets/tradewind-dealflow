@@ -115,7 +115,7 @@ function parseSnapshot(snapshot: string): StorageReadResult {
           return null;
         },
       },
-      new Date(BOOTSTRAP_TIME),
+      new Date(),
     );
   } catch {
     return {

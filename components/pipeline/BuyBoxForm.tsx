@@ -8,9 +8,9 @@ import {
 
 import { useLocalData } from "@/components/LocalDataProvider";
 import {
-  normalizeBuyBox,
   type BuyBoxValidationResult,
 } from "@/lib/qualification";
+import { normalizeLaunchBuyBox } from "@/lib/launch-qualification";
 import type {
   BuyBoxConfig,
   DataConfidence,
@@ -61,7 +61,11 @@ export function BuyBoxForm() {
   const save = async (event: FormEvent) => {
     event.preventDefault();
     const candidate = candidateFromDraft(draft, data.buyBox);
-    const validation = normalizeBuyBox(candidate, data.buyBox, new Date());
+    const validation = normalizeLaunchBuyBox(
+      candidate,
+      data.buyBox,
+      new Date(),
+    );
     if (!validation.ok) {
       const nextErrors = errorsFromValidation(validation);
       setErrors(nextErrors);
@@ -73,7 +77,11 @@ export function BuyBoxForm() {
     let storedVersion: number | null = null;
     let lockedValidationError = "";
     const result = await updateData((current) => {
-      const normalized = normalizeBuyBox(candidate, current.buyBox, new Date());
+      const normalized = normalizeLaunchBuyBox(
+        candidate,
+        current.buyBox,
+        new Date(),
+      );
       if (!normalized.ok) {
         lockedValidationError = normalized.errors.join(" ");
         throw new Error("Invalid buy-box update");

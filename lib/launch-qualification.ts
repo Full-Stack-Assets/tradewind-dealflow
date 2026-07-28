@@ -4,6 +4,27 @@ import type {
   QualificationSubfactor,
   ResearchTask,
 } from "./qualification.ts";
+import {
+  normalizeBuyBox,
+  type BuyBoxValidationResult,
+} from "./qualification.ts";
+import type { BuyBoxConfig, StateCode } from "./types.ts";
+
+const LAUNCH_MARKET_BY_STATE: Record<StateCode, string> = {
+  MA: "bristol county",
+  RI: "providence county",
+};
+
+const LAUNCH_PROPERTY_TYPE_ALIASES = new Map<string, string>([
+  ["single-family homes", "single-family homes"],
+  ["single-family residential", "single-family homes"],
+  ["duplexes", "duplexes"],
+  ["two-family residential", "duplexes"],
+  ["triplexes", "triplexes"],
+  ["three-family residential", "triplexes"],
+  ["four-unit residential", "four-unit residential"],
+  ["four-family residential", "four-unit residential"],
+]);
 
 export type LaunchQualificationStatus =
   | "Qualified"
@@ -54,6 +75,63 @@ export type LaunchQualificationView = {
   recommendedAction: string;
   sellerFit: "Unassessed" | "Assessed";
 };
+
+export function normalizeLaunchBuyBox(
+  input: BuyBoxConfig,
+  previous: BuyBoxConfig,
+  now: Date,
+): BuyBoxValidationResult {
+  const errors: string[] = [];
+  const states = Array.isArray(input.states) ? input.states : [];
+  const marketsByState: BuyBoxConfig["marketsByState"] = { MA: [], RI: [] };
+  for (const state of ["MA", "RI"] as const) {
+    const rawMarkets = Array.isArray(input.marketsByState?.[state])
+      ? input.marketsByState[state]
+      : [];
+    const normalizedMarkets = rawMarkets.map(normalizeLaunchLabel);
+    const allowed = LAUNCH_MARKET_BY_STATE[state];
+    if (normalizedMarkets.some((market) => market !== allowed)) {
+      errors.push(
+        `${state} launch markets may include only ${allowed}.`,
+      );
+    }
+    if (states.includes(state)) {
+      if (!normalizedMarkets.includes(allowed)) {
+        errors.push(`${state} requires the frozen ${allowed} launch market.`);
+      } else {
+        marketsByState[state] = [allowed];
+      }
+    }
+  }
+
+  const propertyTypes = Array.isArray(input.propertyTypes)
+    ? input.propertyTypes
+    : [];
+  const canonicalTypes: string[] = [];
+  for (const rawType of propertyTypes) {
+    const canonical = LAUNCH_PROPERTY_TYPE_ALIASES.get(
+      normalizeLaunchLabel(rawType),
+    );
+    if (canonical === undefined) {
+      errors.push(
+        `${String(rawType)} is outside the frozen residential 1–4 family launch scope.`,
+      );
+    } else {
+      canonicalTypes.push(canonical);
+    }
+  }
+  if (errors.length > 0) return { ok: false, errors };
+
+  return normalizeBuyBox(
+    {
+      ...input,
+      marketsByState,
+      propertyTypes: canonicalTypes,
+    },
+    previous,
+    now,
+  );
+}
 
 export function adaptQualificationForLaunch(
   result: QualificationResult,
@@ -187,4 +265,12 @@ function category(
         ? "This launch category is Unassessed because supported evidence is not available."
         : factors.map(({ explanation }) => explanation).join(" "),
   };
+}
+
+function normalizeLaunchLabel(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/gu, " ")
+    .toLocaleLowerCase("en-US");
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { formatProvenanceDate } from "../lib/display-date.ts";
 import {
   createDefaultBuyBox,
   labelResearchPriority,
@@ -10,6 +11,7 @@ import {
   type QualificationContext,
 } from "../lib/qualification.ts";
 import { adaptQualificationForLaunch } from "../lib/launch-qualification.ts";
+import * as launchQualification from "../lib/launch-qualification.ts";
 import type {
   BuyBoxConfig,
   BuyerRecord,
@@ -20,6 +22,15 @@ import type {
 } from "../lib/types.ts";
 
 const evaluationDate = new Date("2026-07-28T12:00:00Z");
+
+test("provenance calendar dates render in UTC without rolling back a day", () => {
+  assert.equal(
+    formatProvenanceDate("2026-07-20T00:00:00.000Z"),
+    "Jul 20, 2026",
+  );
+  assert.equal(formatProvenanceDate("2026-07-20"), "Jul 20, 2026");
+  assert.equal(formatProvenanceDate(null), "Unverified / unknown");
+});
 
 function configuredBuyBox(
   overrides: Partial<BuyBoxConfig> = {},
@@ -216,6 +227,80 @@ test("default buy box contains the editable operating geography, types, threshol
     dataQuality: 10,
     sellerProvidedFit: 10,
   });
+});
+
+test("launch buy-box validation canonicalizes the approved 1–4 family aliases", () => {
+  const normalizeLaunch = (
+    launchQualification as unknown as {
+      normalizeLaunchBuyBox?: (
+        input: BuyBoxConfig,
+        previous: BuyBoxConfig,
+        now: Date,
+      ) => ReturnType<typeof normalizeBuyBox>;
+    }
+  ).normalizeLaunchBuyBox;
+  assert.equal(typeof normalizeLaunch, "function");
+  if (!normalizeLaunch) return;
+  const previous = createDefaultBuyBox("2026-07-27T12:00:00.000Z");
+  const result = normalizeLaunch(
+    {
+      ...previous,
+      propertyTypes: [
+        "Single-family residential",
+        "Two-family residential",
+        "Three-family residential",
+        "Four-family residential",
+      ],
+    },
+    previous,
+    evaluationDate,
+  );
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.value.propertyTypes, [
+    "duplexes",
+    "four-unit residential",
+    "single-family homes",
+    "triplexes",
+  ]);
+});
+
+test("launch buy-box validation rejects geography or property-type expansion", () => {
+  const normalizeLaunch = (
+    launchQualification as unknown as {
+      normalizeLaunchBuyBox?: (
+        input: BuyBoxConfig,
+        previous: BuyBoxConfig,
+        now: Date,
+      ) => ReturnType<typeof normalizeBuyBox>;
+    }
+  ).normalizeLaunchBuyBox;
+  assert.equal(typeof normalizeLaunch, "function");
+  if (!normalizeLaunch) return;
+  const previous = createDefaultBuyBox("2026-07-27T12:00:00.000Z");
+
+  for (const expanded of [
+    {
+      ...previous,
+      marketsByState: {
+        ...previous.marketsByState,
+        MA: ["Bristol County", "Plymouth County"],
+      },
+    },
+    {
+      ...previous,
+      propertyTypes: [...previous.propertyTypes, "Mixed-use"],
+    },
+    {
+      ...previous,
+      states: ["MA"] as BuyBoxConfig["states"],
+      marketsByState: { MA: [], RI: [] },
+    },
+  ]) {
+    const result = normalizeLaunch(expanded, previous, evaluationDate);
+    assert.equal(result.ok, false);
+  }
 });
 
 test("semantic saves normalize, dedupe, and increment only material changes", () => {

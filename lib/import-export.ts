@@ -186,6 +186,10 @@ function validIsoTimestamp(value: unknown): value is string {
     && Number.isFinite(Date.parse(value));
 }
 
+function validSourceTimestamp(value: unknown, now: Date): value is string {
+  return validIsoTimestamp(value) && Date.parse(value) <= now.getTime();
+}
+
 function reconstructStringArray(raw: unknown): string[] | null {
   if (!validArray(raw) || !raw.every(validString)) return null;
   return raw.map(trimmed).filter(Boolean);
@@ -232,11 +236,14 @@ function reconstructPropertyFacts(raw: unknown): PropertyFactSnapshot | null {
   };
 }
 
-function reconstructSourceAssertion(raw: unknown): SourceAssertion | null {
+function reconstructSourceAssertion(
+  raw: unknown,
+  now: Date,
+): SourceAssertion | null {
   const fields = ["id", "source", "sourceRecordId", "retrievedAt", "usageClassification", "confidence", "lastVerifiedAt", "importedAt", "fingerprint", "facts"];
   if (!isRecord(raw) || !hasOnlyKeys(raw, fields)) return null;
   const facts = reconstructPropertyFacts(raw.facts);
-  if (!validString(raw.id) || !validString(raw.source) || !validString(raw.sourceRecordId) || !validString(raw.retrievedAt) || !validUsageClassification(raw.usageClassification) || !validNullableConfidence(raw.confidence) || (raw.lastVerifiedAt !== null && !validString(raw.lastVerifiedAt)) || !validString(raw.importedAt) || !validString(raw.fingerprint) || facts === null) return null;
+  if (!validString(raw.id) || !validString(raw.source) || !validString(raw.sourceRecordId) || !validSourceTimestamp(raw.retrievedAt, now) || !validUsageClassification(raw.usageClassification) || !validNullableConfidence(raw.confidence) || (raw.lastVerifiedAt !== null && !validSourceTimestamp(raw.lastVerifiedAt, now)) || !validSourceTimestamp(raw.importedAt, now) || !validString(raw.fingerprint) || facts === null) return null;
   return { id: raw.id, source: trimmed(raw.source), sourceRecordId: trimmed(raw.sourceRecordId), retrievedAt: raw.retrievedAt, usageClassification: raw.usageClassification, confidence: raw.confidence, lastVerifiedAt: raw.lastVerifiedAt, importedAt: raw.importedAt, fingerprint: raw.fingerprint, facts };
 }
 
@@ -255,12 +262,14 @@ function reconstructResearchRestriction(raw: unknown): ResearchRestriction | nul
   return { id: raw.id, code: raw.code, source: raw.source as ResearchRestriction["source"], sourceAssertionId: raw.sourceAssertionId, reason: trimmed(raw.reason), createdAt: raw.createdAt, resolvedAt: raw.resolvedAt, resolutionNote: trimmed(raw.resolutionNote) };
 }
 
-function reconstructDealV2(raw: unknown): DealRecord | null {
+function reconstructDealV2(raw: unknown, now: Date): DealRecord | null {
   const fields = ["id", "createdAt", "updatedAt", "state", "address", "city", "zip", "market", "propertyType", "source", "ownerContactStatus", "stage", "nextAction", "notes", "askingPrice", "rehabLevel", "sourceAssertions", "factConflicts", "researchRestrictions", "strategies", "executedAgreement", "equitableInterestRecorded", "legalTitleDisclosureReady", "attorneyReviewComplete"];
   if (!isRecord(raw) || !hasOnlyKeys(raw, fields)) return null;
   const zip = raw.zip === undefined ? "" : raw.zip;
   if (!validString(raw.id) || !validString(raw.createdAt) || !validString(raw.updatedAt) || !validState(raw.state) || !validString(raw.address) || !validString(raw.city) || !validString(zip) || !validString(raw.market) || !validString(raw.propertyType) || !validString(raw.source) || !validString(raw.ownerContactStatus) || !validPipelineStage(raw.stage) || !validString(raw.nextAction) || !validString(raw.notes) || !validNullableNonnegativeNumber(raw.askingPrice) || (raw.rehabLevel !== null && !validRehab(raw.rehabLevel)) || !validArray(raw.sourceAssertions) || !validArray(raw.factConflicts) || !validArray(raw.researchRestrictions) || !validArray(raw.strategies) || !raw.strategies.every(validStrategy) || typeof raw.executedAgreement !== "boolean" || typeof raw.equitableInterestRecorded !== "boolean" || typeof raw.legalTitleDisclosureReady !== "boolean" || typeof raw.attorneyReviewComplete !== "boolean") return null;
-  const sourceAssertions = raw.sourceAssertions.map(reconstructSourceAssertion);
+  const sourceAssertions = raw.sourceAssertions.map((assertion) =>
+    reconstructSourceAssertion(assertion, now)
+  );
   const factConflicts = raw.factConflicts.map(reconstructFactConflict);
   const researchRestrictions = raw.researchRestrictions.map(reconstructResearchRestriction);
   if (sourceAssertions.some((item) => item === null) || factConflicts.some((item) => item === null) || researchRestrictions.some((item) => item === null)) return null;
@@ -540,12 +549,15 @@ export function migrateV1(value: DealFlowDataV1, now: Date): DealFlowData {
   };
 }
 
-function reconstructV2(value: Record<string, unknown>): DealFlowData | null {
+function reconstructV2(
+  value: Record<string, unknown>,
+  now: Date,
+): DealFlowData | null {
   const fields = ["schemaVersion", "revision", "updatedAt", "preferences", "buyBox", "deals", "buyers", "analyses", "curriculum", "weekProgress", "readinessChecks", "compliance", "dealDeskDraft"];
   if (!hasOnlyKeys(value, fields) || value.schemaVersion !== 2 || !validNonnegativeInteger(value.revision) || !validString(value.updatedAt) || !validArray(value.deals) || !validArray(value.buyers) || !validArray(value.analyses)) return null;
   const preferences = reconstructPreferences(value.preferences);
   const buyBox = reconstructBuyBox(value.buyBox);
-  const deals = value.deals.map(reconstructDealV2);
+  const deals = value.deals.map((deal) => reconstructDealV2(deal, now));
   const buyers = value.buyers.map(reconstructBuyer);
   const analyses = value.analyses.map(reconstructAnalysis);
   const curriculum = reconstructBooleanRecord(value.curriculum);
@@ -570,7 +582,7 @@ export function validateImport(value: unknown, now = new Date()): ImportResult {
     return v1 === null ? { ok: false, errors: ["The import contains malformed version-1 workspace data."] } : { ok: true, data: migrateV1(v1, now) };
   }
   if (value.schemaVersion === 2) {
-    const v2 = reconstructV2(value);
+    const v2 = reconstructV2(value, now);
     return v2 === null ? { ok: false, errors: ["The import contains malformed version-2 workspace data."] } : { ok: true, data: v2 };
   }
   return { ok: false, errors: [`This file uses schema version ${String(value.schemaVersion)}; Tradewind DealFlow supports versions 1 and 2.`, "The import is missing required top-level fields."] };

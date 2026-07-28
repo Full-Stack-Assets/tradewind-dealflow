@@ -11,22 +11,22 @@ import { useLocalData } from "@/components/LocalDataProvider";
 import {
   decodeCsvFile,
   parseCsv,
+  readCurrentCsvFile,
 } from "@/lib/csv";
 import { downloadText } from "@/lib/download";
 import {
   applyLeadImportPlan,
   attachPossibleDuplicate,
   holdPossibleDuplicate,
+  leadImportControlState,
   planLeadImport,
+  previewPlanFactConflicts,
   validateLeadCsv,
   type LeadImportCandidate,
   type LeadImportPlan,
+  type PlannedFactConflict,
 } from "@/lib/lead-ingestion";
-import type {
-  DealFlowData,
-  DealRecord,
-  PropertyFactSnapshot,
-} from "@/lib/types";
+import type { DealRecord } from "@/lib/types";
 
 type ImportPreview = {
   id: number;
@@ -55,20 +55,6 @@ const LAUNCH_TEMPLATE_HEADERS = [
   "notes",
 ] as const;
 
-const FACT_FIELDS: Array<keyof PropertyFactSnapshot> = [
-  "state",
-  "address",
-  "city",
-  "zip",
-  "market",
-  "propertyType",
-  "askingPrice",
-  "rehabLevel",
-  "ownerContactStatus",
-  "nextAction",
-  "notes",
-];
-
 export function AuthorizedCsvImport() {
   const {
     data,
@@ -82,23 +68,16 @@ export function AuthorizedCsvImport() {
   const previewHeadingRef = useRef<HTMLHeadingElement>(null);
   const previewSequence = useRef(0);
 
-  const safeCount = preview?.plan ? countSafeRows(preview.plan) : 0;
-  const stale =
-    preview?.plan !== null &&
-    preview?.plan !== undefined &&
-    preview.plan.baseRevision !== data.revision;
-  const unresolved = preview?.plan?.possibleDuplicates.length ?? 0;
-  const applyDisabled =
-    preview?.plan === null ||
-    preview?.plan === undefined ||
-    safeCount === 0 ||
-    unresolved > 0 ||
-    stale ||
-    !writesSupported ||
-    storageStatus === "corrupt";
+  const controls = leadImportControlState({
+    plan: preview?.plan ?? null,
+    currentRevision: data.revision,
+    writesSupported,
+    storageCorrupt: storageStatus === "corrupt",
+  });
+  const applyDisabled = !controls.canApply;
 
   const conflictPreviews = preview?.plan
-    ? plannedConflictPreviews(data, preview.plan)
+    ? previewPlanFactConflicts(data, preview.plan)
     : [];
   const restrictedCount = preview?.plan
     ? countRestrictedRows(preview.plan)
@@ -109,9 +88,24 @@ export function AuthorizedCsvImport() {
     if (!file) return;
     previewSequence.current += 1;
     const id = previewSequence.current;
+    const read = await readCurrentCsvFile(
+      file,
+      () => id === previewSequence.current,
+    );
+    if (read === null) return;
+    if (!read.ok) {
+      setPreview({
+        id,
+        fileName: file.name,
+        plan: null,
+        errors: [read.error],
+      });
+      requestAnimationFrame(() => previewHeadingRef.current?.focus());
+      setMessage("The selected file was rejected before planning.");
+      return;
+    }
     try {
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      const text = decodeCsvFile(bytes);
+      const text = decodeCsvFile(read.bytes);
       const parsed = parseCsv(text);
       if (!parsed.ok) {
         setPreview({
@@ -273,7 +267,7 @@ export function AuthorizedCsvImport() {
           ref={inputRef}
           type="file"
           accept=".csv,text/csv"
-          disabled={!writesSupported}
+          disabled={!controls.canSelectFile}
           aria-describedby="csv-file-help"
           onChange={chooseFile}
         />
@@ -295,7 +289,7 @@ export function AuthorizedCsvImport() {
             <span className="source-identifier">{preview.fileName}</span>
           </div>
 
-          {stale && (
+          {controls.stale && (
             <p className="inline-alert" role="alert">
               The workspace changed after this preview. Select the file again
               before applying records.
@@ -339,19 +333,63 @@ export function AuthorizedCsvImport() {
             </PreviewGroup>
           )}
 
+          {(preview.plan?.newRows.length ?? 0) > 0 && (
+            <PreviewGroup title="Safe new records">
+              <div className="preview-card-list">
+                {preview.plan?.newRows.map((item) => (
+                  <CandidatePreviewCard
+                    key={item.rowNumber}
+                    rowNumber={item.rowNumber}
+                    candidate={item.candidate}
+                    reason="Will create a new Research-stage property record."
+                  />
+                ))}
+              </div>
+            </PreviewGroup>
+          )}
+
+          {(preview.plan?.changedSourceRows.length ?? 0) > 0 && (
+            <PreviewGroup title="Changed source snapshots" tone="warning">
+              <div className="preview-card-list">
+                {preview.plan?.changedSourceRows.map((item) => (
+                  <CandidatePreviewCard
+                    key={item.rowNumber}
+                    rowNumber={item.rowNumber}
+                    candidate={item.candidate}
+                    reason="Will preserve a new source snapshot without silently replacing canonical facts."
+                    conflicts={conflictsForRow(conflictPreviews, item.rowNumber)}
+                  />
+                ))}
+              </div>
+            </PreviewGroup>
+          )}
+
+          {(preview.plan?.attachments.length ?? 0) > 0 && (
+            <PreviewGroup title="Confirmed source attachments" tone="warning">
+              <div className="preview-card-list">
+                {preview.plan?.attachments.map((item) => (
+                  <CandidatePreviewCard
+                    key={item.rowNumber}
+                    rowNumber={item.rowNumber}
+                    candidate={item.candidate}
+                    reason="Will attach this source snapshot to the property selected during duplicate review."
+                    conflicts={conflictsForRow(conflictPreviews, item.rowNumber)}
+                  />
+                ))}
+              </div>
+            </PreviewGroup>
+          )}
+
           {(preview.plan?.possibleDuplicates.length ?? 0) > 0 && (
             <PreviewGroup title="Resolve or hold possible property matches" tone="warning">
               <div className="preview-card-list">
                 {preview.plan?.possibleDuplicates.map((item) => (
-                  <article className="preview-card" key={item.rowNumber}>
-                    <strong>
-                      Row {item.rowNumber}: {item.candidate.address}
-                    </strong>
-                    <span>
-                      {item.candidate.city}, {item.candidate.state}{" "}
-                      {item.candidate.zip}
-                    </span>
-                    <p>{item.reason}</p>
+                  <CandidatePreviewCard
+                    key={item.rowNumber}
+                    rowNumber={item.rowNumber}
+                    candidate={item.candidate}
+                    reason={item.reason}
+                  >
                     <div className="button-row">
                       {item.matchingDealIds.map((dealId) => {
                         const deal = data.deals.find(({ id }) => id === dealId);
@@ -374,60 +412,54 @@ export function AuthorizedCsvImport() {
                         Hold outside production
                       </button>
                     </div>
-                  </article>
+                  </CandidatePreviewCard>
                 ))}
               </div>
             </PreviewGroup>
           )}
 
-          {conflictPreviews.length > 0 && (
-            <PreviewGroup title="Potential conflicting facts" tone="warning">
-              <ul>
-                {conflictPreviews.map(({ rowNumber, fields }) => (
-                  <li key={rowNumber}>
-                    Row {rowNumber}: {fields.join(", ")} will remain conflicting
-                    until reviewed; canonical facts will not be overwritten.
-                  </li>
-                ))}
-              </ul>
-            </PreviewGroup>
-          )}
-
           {(preview.plan?.exactReimports.length ?? 0) > 0 && (
             <PreviewGroup title="Exact unchanged reimports">
-              <ul>
+              <div className="preview-card-list">
                 {preview.plan?.exactReimports.map((item) => (
-                  <li key={item.rowNumber}>
-                    Row {item.rowNumber}: no record or source snapshot will be
-                    created.
-                  </li>
+                  <CandidatePreviewCard
+                    key={item.rowNumber}
+                    rowNumber={item.rowNumber}
+                    candidate={item.candidate}
+                    reason={`${item.reason} No record or source snapshot will be created.`}
+                  />
                 ))}
-              </ul>
+              </div>
             </PreviewGroup>
           )}
 
           {(preview.plan?.sameFileDuplicates.length ?? 0) > 0 && (
             <PreviewGroup title="Same-file duplicates">
-              <ul>
+              <div className="preview-card-list">
                 {preview.plan?.sameFileDuplicates.map((item) => (
-                  <li key={item.rowNumber}>
-                    Row {item.rowNumber}: no duplicate record or source
-                    snapshot will be created.
-                  </li>
+                  <CandidatePreviewCard
+                    key={item.rowNumber}
+                    rowNumber={item.rowNumber}
+                    candidate={item.candidate}
+                    reason={`${item.reason} No duplicate record or source snapshot will be created.`}
+                  />
                 ))}
-              </ul>
+              </div>
             </PreviewGroup>
           )}
 
           {(preview.plan?.rejected.length ?? 0) > 0 && (
             <PreviewGroup title="Rows held outside production" tone="blocked">
-              <ul>
+              <div className="preview-card-list">
                 {preview.plan?.rejected.map((item) => (
-                  <li key={item.rowNumber}>
-                    Row {item.rowNumber}: {item.reason}
-                  </li>
+                  <CandidatePreviewCard
+                    key={item.rowNumber}
+                    rowNumber={item.rowNumber}
+                    candidate={item.candidate}
+                    reason={item.reason}
+                  />
                 ))}
-              </ul>
+              </div>
             </PreviewGroup>
           )}
 
@@ -490,6 +522,61 @@ function PreviewGroup({
   );
 }
 
+function CandidatePreviewCard({
+  rowNumber,
+  candidate,
+  reason,
+  conflicts = [],
+  children,
+}: {
+  rowNumber: number;
+  candidate: LeadImportCandidate;
+  reason: string;
+  conflicts?: PlannedFactConflict[];
+  children?: ReactNode;
+}) {
+  return (
+    <article className="preview-card">
+      <strong>
+        Row {rowNumber}: {candidate.address}
+      </strong>
+      <span>
+        {candidate.city}, {candidate.state} {candidate.zip}
+      </span>
+      <dl className="candidate-preview-meta">
+        <div>
+          <dt>Source</dt>
+          <dd>
+            {candidate.source} · {candidate.sourceRecordId}
+          </dd>
+        </div>
+        <div>
+          <dt>Usage rights</dt>
+          <dd>{candidate.usageClassification}</dd>
+        </div>
+      </dl>
+      <p>{reason}</p>
+      {conflicts.length > 0 && (
+        <div className="candidate-conflicts">
+          <strong>Conflicting facts preserved for review</strong>
+          <dl>
+            {conflicts.map((conflict) => (
+              <div key={`${rowNumber}-${conflict.field}`}>
+                <dt>{conflict.field}</dt>
+                <dd>
+                  Current: {displayValue(conflict.canonicalValue)} · Source:{" "}
+                  {displayValue(conflict.assertedValue)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+      {children}
+    </article>
+  );
+}
+
 function countSafeRows(plan: LeadImportPlan): number {
   return (
     plan.newRows.length +
@@ -517,60 +604,15 @@ function countRestrictedRows(plan: LeadImportPlan): number {
   ).length;
 }
 
-function plannedConflictPreviews(
-  data: DealFlowData,
-  plan: LeadImportPlan,
-): Array<{ rowNumber: number; fields: string[] }> {
-  const planned = new Map(
-    plan.newRows.map((item) => [item.rowNumber, item.candidate]),
-  );
-  const result: Array<{ rowNumber: number; fields: string[] }> = [];
-  for (const item of plan.changedSourceRows) {
-    const target = item.dealId
-      ? data.deals.find(({ id }) => id === item.dealId)
-      : candidateAsDealFacts(
-          planned.get(item.plannedDealRowNumber ?? -1) ?? null,
-        );
-    const fields = target
-      ? differingFields(target, item.candidate)
-      : [];
-    if (fields.length > 0) result.push({ rowNumber: item.rowNumber, fields });
-  }
-  for (const item of plan.attachments) {
-    const target = data.deals.find(({ id }) => id === item.dealId);
-    const fields = target ? differingFields(target, item.candidate) : [];
-    if (fields.length > 0) result.push({ rowNumber: item.rowNumber, fields });
-  }
-  return result;
+function conflictsForRow(
+  conflicts: PlannedFactConflict[],
+  rowNumber: number,
+): PlannedFactConflict[] {
+  return conflicts.filter((conflict) => conflict.rowNumber === rowNumber);
 }
 
-function candidateAsDealFacts(
-  candidate: LeadImportCandidate | null,
-): PropertyFactSnapshot | null {
-  return candidate === null ? null : {
-    state: candidate.state,
-    address: candidate.address,
-    city: candidate.city,
-    zip: candidate.zip,
-    market: candidate.market,
-    propertyType: candidate.propertyType ?? "",
-    askingPrice: candidate.askingPrice,
-    rehabLevel: candidate.rehabLevel,
-    ownerContactStatus: candidate.ownerContactStatus ?? "",
-    nextAction: candidate.nextAction ?? "",
-    notes: candidate.notes ?? "",
-  };
-}
-
-function differingFields(
-  target: Pick<DealRecord, keyof PropertyFactSnapshot> | PropertyFactSnapshot,
-  candidate: LeadImportCandidate,
-): string[] {
-  const asserted = candidateAsDealFacts(candidate);
-  if (asserted === null) return [];
-  return FACT_FIELDS.filter(
-    (field) => JSON.stringify(target[field]) !== JSON.stringify(asserted[field]),
-  );
+function displayValue(value: string | number | null): string {
+  return value === null || value === "" ? "Unknown / blank" : String(value);
 }
 
 function safeError(error: unknown): string {

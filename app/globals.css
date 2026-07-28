@@ -2218,6 +2218,46 @@ input[type="radio"] {
   font-size: 0.75rem;
 }
 
+.candidate-preview-meta,
+.candidate-conflicts dl {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.65rem 0;
+}
+
+.candidate-preview-meta div,
+.candidate-conflicts dl div {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.candidate-preview-meta dt,
+.candidate-conflicts dt {
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.candidate-preview-meta dd,
+.candidate-conflicts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.75rem;
+}
+
+.candidate-conflicts {
+  margin: 0.7rem 0;
+  padding: 0.65rem;
+  border-left: 3px solid var(--coral-500);
+  background: var(--coral-100);
+}
+
+.candidate-conflicts > strong {
+  font-size: 0.75rem;
+}
+
 .preview-actions {
   margin-top: 1rem;
 }

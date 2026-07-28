@@ -1,6 +1,8 @@
 import {
   createEmptyData,
+  parseImportText,
   validateImport,
+  type ImportResult,
 } from "./import-export.ts";
 import type { DealFlowData } from "./types.ts";
 
@@ -25,6 +27,10 @@ const WORKSPACE_TOO_LARGE_MESSAGE =
   "The workspace is too large to save in this browser. Export a backup and remove records before trying again.";
 const INVALID_MUTATION_MESSAGE =
   "The workspace change was rejected because it did not produce valid data.";
+const BACKUP_TOO_LARGE_MESSAGE =
+  "The selected backup is too large. Backups must be 4 MiB or smaller.";
+const BACKUP_READ_MESSAGE =
+  "The selected backup could not be read safely.";
 
 export type StorageLike = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
@@ -67,6 +73,35 @@ export type WorkspaceLockManager = {
     callback: () => Promise<T> | T,
   ): Promise<T>;
 };
+
+export type WorkspaceBackupFile = {
+  size: number;
+  text(): Promise<string>;
+};
+
+export async function readWorkspaceBackup(
+  file: WorkspaceBackupFile,
+  now = new Date(),
+): Promise<ImportResult> {
+  if (
+    !Number.isSafeInteger(file.size) ||
+    file.size < 0 ||
+    file.size > MAX_WORKSPACE_BYTES
+  ) {
+    return { ok: false, errors: [BACKUP_TOO_LARGE_MESSAGE] };
+  }
+
+  let text: string;
+  try {
+    text = await file.text();
+  } catch {
+    return { ok: false, errors: [BACKUP_READ_MESSAGE] };
+  }
+  if (new TextEncoder().encode(text).byteLength > MAX_WORKSPACE_BYTES) {
+    return { ok: false, errors: [BACKUP_TOO_LARGE_MESSAGE] };
+  }
+  return parseImportText(text, now);
+}
 
 function parseStoredCandidate(
   serialized: string,

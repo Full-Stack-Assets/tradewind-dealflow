@@ -130,6 +130,22 @@ export type ImportApplyResult =
   | { ok: true; data: DealFlowData }
   | { ok: false; error: string };
 
+export type PropertyFactDifference = {
+  field: keyof PropertyFactSnapshot;
+  canonicalValue: string | number | null;
+  assertedValue: string | number | null;
+};
+
+export type PlannedFactConflict = PropertyFactDifference & {
+  rowNumber: number;
+};
+
+export type LeadImportControlState = {
+  canSelectFile: true;
+  canApply: boolean;
+  stale: boolean;
+};
+
 type ImportTarget =
   | { kind: "existing"; dealId: string }
   | { kind: "planned"; rowNumber: number };
@@ -160,6 +176,37 @@ const PROPERTY_FACT_FIELDS: readonly (keyof PropertyFactSnapshot)[] = [
 
 const STALE_PLAN_ERROR =
   "The workspace changed after preview. Review the file again.";
+
+export function leadImportControlState({
+  plan,
+  currentRevision,
+  writesSupported,
+  storageCorrupt,
+}: {
+  plan: LeadImportPlan | null;
+  currentRevision: number;
+  writesSupported: boolean;
+  storageCorrupt: boolean;
+}): LeadImportControlState {
+  const stale = plan !== null && plan.baseRevision !== currentRevision;
+  const safeRows =
+    plan === null
+      ? 0
+      : plan.newRows.length +
+        plan.changedSourceRows.length +
+        plan.attachments.length;
+  return {
+    canSelectFile: true,
+    canApply:
+      plan !== null &&
+      safeRows > 0 &&
+      plan.possibleDuplicates.length === 0 &&
+      !stale &&
+      writesSupported &&
+      !storageCorrupt,
+    stale,
+  };
+}
 
 export function validateLeadCsv(table: string[][], now: Date): LeadCsvValidationResult {
   if (table.length === 0) return invalid("The CSV must include a header row.");
@@ -237,6 +284,7 @@ export function planLeadImport(
     PendingPossibleIdentity[]
   >();
   const blockedPossibleIdentities = new Set<string>();
+  const seenBatchFingerprints = new Set<string>();
 
   for (const deal of data.deals) {
     addPropertyTarget(properties, propertyKeyFromDeal(deal), {
@@ -257,6 +305,17 @@ export function planLeadImport(
     const rowNumber = index + 2;
     const identity = sourceIdentity(candidate.source, candidate.sourceRecordId);
     const fingerprint = fingerprintCandidate(candidate);
+    const batchFingerprint = `${identity}\u001e${fingerprint}`;
+    if (seenBatchFingerprints.has(batchFingerprint)) {
+      plan.sameFileDuplicates.push({
+        rowNumber,
+        candidate,
+        reason:
+          "This row exactly duplicates an earlier row in the selected file.",
+      });
+      return;
+    }
+    seenBatchFingerprints.add(batchFingerprint);
     const identityMatches = identities.get(identity);
     if (identityMatches && identityMatches.size > 1) {
       plan.rejected.push({
@@ -270,17 +329,10 @@ export function planLeadImport(
     if (identityMatches && identityMatches.size === 1) {
       const indexed = identityMatches.values().next().value as IndexedTarget;
       if (indexed.fingerprints.has(fingerprint)) {
-        const category =
-          indexed.target.kind === "planned"
-            ? plan.sameFileDuplicates
-            : plan.exactReimports;
-        category.push({
+        plan.exactReimports.push({
           rowNumber,
           candidate,
-          reason:
-            indexed.target.kind === "planned"
-              ? "This row exactly duplicates an earlier row in the selected file."
-              : "This exact source snapshot was imported previously.",
+          reason: "This exact source snapshot was imported previously.",
         });
         return;
       }
@@ -374,6 +426,55 @@ export function planLeadImport(
   });
 
   return plan;
+}
+
+export function comparePropertyFacts(
+  canonical: Pick<DealRecord, keyof PropertyFactSnapshot> | PropertyFactSnapshot,
+  asserted: PropertyFactSnapshot,
+): PropertyFactDifference[] {
+  const differences: PropertyFactDifference[] = [];
+  for (const field of PROPERTY_FACT_FIELDS) {
+    const canonicalValue = canonical[field];
+    const assertedValue = asserted[field];
+    if (assertedValue === null || assertedValue === "") continue;
+    if (canonicalJson(canonicalValue) === canonicalJson(assertedValue)) continue;
+    differences.push({ field, canonicalValue, assertedValue });
+  }
+  return differences;
+}
+
+export function previewPlanFactConflicts(
+  data: DealFlowData,
+  plan: LeadImportPlan,
+): PlannedFactConflict[] {
+  const plannedFacts = new Map(
+    plan.newRows.map((item) => [
+      item.rowNumber,
+      factsFromCandidate(item.candidate),
+    ]),
+  );
+  const result: PlannedFactConflict[] = [];
+  for (const item of plan.changedSourceRows) {
+    const target = item.dealId
+      ? data.deals.find(({ id }) => id === item.dealId)
+      : plannedFacts.get(item.plannedDealRowNumber ?? -1);
+    if (!target) continue;
+    result.push(
+      ...comparePropertyFacts(target, factsFromCandidate(item.candidate)).map(
+        (difference) => ({ rowNumber: item.rowNumber, ...difference }),
+      ),
+    );
+  }
+  for (const item of plan.attachments) {
+    const target = data.deals.find(({ id }) => id === item.dealId);
+    if (!target) continue;
+    result.push(
+      ...comparePropertyFacts(target, factsFromCandidate(item.candidate)).map(
+        (difference) => ({ rowNumber: item.rowNumber, ...difference }),
+      ),
+    );
+  }
+  return result;
 }
 
 export function attachPossibleDuplicate(
@@ -682,11 +783,11 @@ function addFactConflicts(
   assertion: SourceAssertion,
   detectedAt: string,
 ): void {
-  for (const field of PROPERTY_FACT_FIELDS) {
-    const canonicalValue = deal[field];
-    const assertedValue = assertion.facts[field];
-    if (assertedValue === null || assertedValue === "") continue;
-    if (canonicalJson(canonicalValue) === canonicalJson(assertedValue)) continue;
+  for (const {
+    field,
+    canonicalValue,
+    assertedValue,
+  } of comparePropertyFacts(deal, assertion.facts)) {
     const duplicate = deal.factConflicts.some(
       (conflict) =>
         conflict.field === field &&

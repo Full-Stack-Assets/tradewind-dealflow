@@ -8,6 +8,27 @@ export type CsvParseResult =
   | { ok: true; rows: string[][] }
   | { ok: false; errors: string[] };
 
+export type CurrentCsvFileReadResult =
+  | { ok: true; bytes: Uint8Array }
+  | { ok: false; error: string };
+
+export async function readCurrentCsvFile(
+  file: { arrayBuffer(): Promise<ArrayBuffer> },
+  isCurrent: () => boolean,
+): Promise<CurrentCsvFileReadResult | null> {
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    return isCurrent() ? { ok: true, bytes } : null;
+  } catch {
+    return isCurrent()
+      ? {
+          ok: false,
+          error: "The selected CSV file could not be read safely.",
+        }
+      : null;
+  }
+}
+
 export function decodeCsvFile(bytes: Uint8Array): string {
   if (bytes.byteLength > MAX_CSV_BYTES) {
     throw new Error("CSV files must be no larger than one MiB.");

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { useLocalData } from "@/components/LocalDataProvider";
+import { formatProvenanceDate } from "@/lib/display-date";
 import { StatusPill } from "@/components/WorkspaceShell";
 import {
   resolveFactConflict,
@@ -227,11 +228,11 @@ export function QualificationPanel({ deal }: { deal: DealRecord }) {
                   </div>
                   <div>
                     <dt>Retrieved</dt>
-                    <dd>{formatDate(assertion.retrievedAt)}</dd>
+                    <dd>{formatProvenanceDate(assertion.retrievedAt)}</dd>
                   </div>
                   <div>
                     <dt>Verified</dt>
-                    <dd>{formatDate(assertion.lastVerifiedAt)}</dd>
+                    <dd>{formatProvenanceDate(assertion.lastVerifiedAt)}</dd>
                   </div>
                   <div>
                     <dt>Confidence</dt>
@@ -499,11 +500,12 @@ function RestrictionItem({
       </div>
       <p>{restriction.reason}</p>
       <small>
-        Source: {restriction.source} · Created {formatDate(restriction.createdAt)}
+        Source: {restriction.source} · Created{" "}
+        {formatProvenanceDate(restriction.createdAt)}
       </small>
       {restriction.resolvedAt !== null && (
         <p className="muted-copy">
-          Resolved {formatDate(restriction.resolvedAt)}:{" "}
+          Resolved {formatProvenanceDate(restriction.resolvedAt)}:{" "}
           {restriction.resolutionNote}
         </p>
       )}
@@ -576,18 +578,6 @@ function statusTone(
     return "blocked";
   }
   return "neutral";
-}
-
-function formatDate(value: string | null): string {
-  if (!value) return "Unverified / unknown";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime())
-    ? value
-    : parsed.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
 }
 
 function displayValue(value: string | number | null): string {

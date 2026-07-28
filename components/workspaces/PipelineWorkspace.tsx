@@ -19,11 +19,13 @@ import {
 } from "@/components/WorkspaceShell";
 import { downloadText } from "@/lib/download";
 import {
-  parseImportText,
   serializeData,
   serializePipelineCsv,
 } from "@/lib/import-export";
-import { shouldOfferWorkspaceClear } from "@/lib/local-storage";
+import {
+  readWorkspaceBackup,
+  shouldOfferWorkspaceClear,
+} from "@/lib/local-storage";
 import type { DealFlowData } from "@/lib/types";
 
 export function PipelineWorkspace() {
@@ -59,7 +61,7 @@ export function PipelineWorkspace() {
   const readBackup = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    const result = parseImportText(await file.text());
+    const result = await readWorkspaceBackup(file);
     event.target.value = "";
     if (!result.ok) {
       setMessage(`Backup rejected: ${result.errors.join(" ")}`);

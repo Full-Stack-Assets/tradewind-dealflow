@@ -9,12 +9,15 @@ import {
   MAX_CSV_TOTAL_CHARACTERS,
   decodeCsvFile,
   parseCsv,
+  readCurrentCsvFile,
 } from "../lib/csv.ts";
 import {
   applyLeadImportPlan,
   attachPossibleDuplicate,
   holdPossibleDuplicate,
+  leadImportControlState,
   planLeadImport,
+  previewPlanFactConflicts,
   resolveFactConflict,
   resolveResearchRestriction,
   validateLeadCsv,
@@ -135,6 +138,26 @@ test("CSV decoding rejects invalid UTF-8 and files over one MiB", () => {
     () => decodeCsvFile(new Uint8Array(MAX_CSV_BYTES + 1)),
     /one MiB/i,
   );
+});
+
+test("a slower older CSV read is ignored after a newer selection", async () => {
+  let resolveRead: ((value: ArrayBuffer) => void) | undefined;
+  let currentSelection = 1;
+  const olderRead = readCurrentCsvFile(
+    {
+      arrayBuffer: () =>
+        new Promise<ArrayBuffer>((resolve) => {
+          resolveRead = resolve;
+        }),
+    },
+    () => currentSelection === 1,
+  );
+
+  currentSelection = 2;
+  assert.ok(resolveRead);
+  resolveRead(new Uint8Array([1, 2, 3]).buffer);
+
+  assert.equal(await olderRead, null);
 });
 
 test("CSV accepts at most one leading UTF-8 BOM from bytes or direct text", () => {
@@ -532,6 +555,98 @@ test("an exact duplicate within one selected file has its own preview category",
   assert.equal(plan.sameFileDuplicates.length, 1);
   assert.equal(plan.exactReimports.length, 0);
   assert.equal(plan.sameFileDuplicates[0]?.rowNumber, 3);
+});
+
+test("CSV preview remains available without Web Locks while apply stays disabled", () => {
+  const plan = planLeadImport(emptyWorkspace(), [
+    candidate({ sourceRecordId: "read-only-preview" }),
+  ]);
+  const controls = leadImportControlState({
+    plan,
+    currentRevision: 0,
+    writesSupported: false,
+    storageCorrupt: false,
+  });
+
+  assert.equal(controls.canSelectFile, true);
+  assert.equal(controls.canApply, false);
+});
+
+test("same-file fingerprints take precedence after a historical exact reimport", () => {
+  const original = candidate({ sourceRecordId: "historical-repeat" });
+  const imported = importCandidates(emptyWorkspace(), [original]);
+  const plan = planLeadImport(imported, [original, original]);
+
+  assert.equal(plan.exactReimports.length, 1);
+  assert.equal(plan.exactReimports[0]?.rowNumber, 2);
+  assert.equal(plan.sameFileDuplicates.length, 1);
+  assert.equal(plan.sameFileDuplicates[0]?.rowNumber, 3);
+});
+
+test("same-file fingerprints take precedence after a changed source snapshot", () => {
+  const original = candidate({ sourceRecordId: "changed-repeat" });
+  const imported = importCandidates(emptyWorkspace(), [original]);
+  const changed = candidate({
+    sourceRecordId: "changed-repeat",
+    retrievedAt: "2026-07-28T00:00:00.000Z",
+    lastVerifiedAt: "2026-07-28T00:00:00.000Z",
+    address: "12 Harbor Way",
+  });
+  const plan = planLeadImport(imported, [changed, changed]);
+
+  assert.equal(plan.changedSourceRows.length, 1);
+  assert.equal(plan.changedSourceRows[0]?.rowNumber, 2);
+  assert.equal(plan.exactReimports.length, 0);
+  assert.equal(plan.sameFileDuplicates.length, 1);
+  assert.equal(plan.sameFileDuplicates[0]?.rowNumber, 3);
+});
+
+test("previewed fact conflicts exactly match conflicts preserved on apply", () => {
+  const imported = importCandidates(
+    emptyWorkspace(),
+    [
+      candidate({
+        sourceRecordId: "conflict-preview",
+        market: "Bristol County",
+        propertyType: "Single-family",
+      }),
+    ],
+  );
+  const changed = candidate({
+    sourceRecordId: "conflict-preview",
+    retrievedAt: "2026-07-28T00:00:00.000Z",
+    lastVerifiedAt: null,
+    address: "12 Harbor Way",
+    market: "",
+    propertyType: null,
+    usageClassification: "Restricted — research only",
+  });
+  const plan = planLeadImport(imported, [changed]);
+  const preview = previewPlanFactConflicts(imported, plan);
+
+  assert.deepEqual(preview, [
+    {
+      rowNumber: 2,
+      field: "address",
+      canonicalValue: "10 Harbor Way",
+      assertedValue: "12 Harbor Way",
+    },
+  ]);
+
+  const applied = applyLeadImportPlan(imported, plan, fixedNow);
+  assert.equal(applied.ok, true);
+  if (!applied.ok) return;
+  assert.deepEqual(
+    applied.data.deals[0]?.factConflicts.map(
+      ({ field, canonicalValue, assertedValue }) => ({
+        rowNumber: 2,
+        field,
+        canonicalValue,
+        assertedValue,
+      }),
+    ),
+    preview,
+  );
 });
 
 test("historical fingerprints stay idempotent while verification-only refreshes are retained", () => {

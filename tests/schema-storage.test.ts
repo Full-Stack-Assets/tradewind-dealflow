@@ -12,6 +12,7 @@ import {
   LOCAL_DATA_KEY,
   MAX_WORKSPACE_BYTES,
   mutateStoredWorkspace,
+  readWorkspaceBackup,
   readStoredWorkspace,
   replaceStoredWorkspace,
   shouldOfferWorkspaceClear,
@@ -81,6 +82,60 @@ function makeVersionOneDeal(overrides: Record<string, unknown> = {}) {
     attorneyReviewComplete: false,
     ...overrides,
   };
+}
+
+function makeVersionTwoWorkspaceWithSourceAssertion() {
+  const data = createEmptyData("2026-07-27T12:00:00.000Z");
+  data.deals.push({
+    id: "source-date-deal",
+    createdAt: "2026-07-27T12:00:00.000Z",
+    updatedAt: "2026-07-27T12:00:00.000Z",
+    state: "MA",
+    address: "10 Harbor Way",
+    city: "Fall River",
+    zip: "02720",
+    market: "Bristol County",
+    propertyType: "Single-family homes",
+    source: "Municipal assessor",
+    ownerContactStatus: "Not researched",
+    stage: "Research",
+    nextAction: "Verify ownership",
+    notes: "",
+    askingPrice: null,
+    rehabLevel: null,
+    sourceAssertions: [{
+      id: "source-date-assertion",
+      source: "Municipal assessor",
+      sourceRecordId: "001",
+      retrievedAt: "2026-07-20T00:00:00.000Z",
+      usageClassification: "Public record",
+      confidence: "Medium",
+      lastVerifiedAt: "2026-07-21T00:00:00.000Z",
+      importedAt: "2026-07-21T01:00:00.000Z",
+      fingerprint: "source-date-fingerprint",
+      facts: {
+        state: "MA",
+        address: "10 Harbor Way",
+        city: "Fall River",
+        zip: "02720",
+        market: "Bristol County",
+        propertyType: "Single-family homes",
+        askingPrice: null,
+        rehabLevel: null,
+        ownerContactStatus: "Not researched",
+        nextAction: "Verify ownership",
+        notes: "",
+      },
+    }],
+    factConflicts: [],
+    researchRestrictions: [],
+    strategies: [],
+    executedAgreement: false,
+    equitableInterestRecorded: false,
+    legalTitleDisclosureReady: false,
+    attorneyReviewComplete: false,
+  });
+  return data;
 }
 
 test("v1 migration preserves DNC and never invents provenance", () => {
@@ -279,6 +334,26 @@ test("strict current buy-box import accepts a valid ISO timestamp with an explic
   assert.equal(result.data.buyBox.updatedAt, "2026-07-27T08:00:00-04:00");
 });
 
+test("source provenance timestamps reject malformed and future values while verification may be null", () => {
+  const now = new Date("2026-07-28T12:00:00.000Z");
+  for (const [field, value] of [
+    ["retrievedAt", "not-a-date"],
+    ["retrievedAt", "2026-07-29T00:00:00.000Z"],
+    ["lastVerifiedAt", "July 27, 2026"],
+    ["lastVerifiedAt", "2026-07-29T00:00:00.000Z"],
+    ["importedAt", "2026-07-21"],
+    ["importedAt", "2026-07-29T00:00:00.000Z"],
+  ] as const) {
+    const candidate = makeVersionTwoWorkspaceWithSourceAssertion();
+    candidate.deals[0]!.sourceAssertions[0]![field] = value;
+    assert.equal(validateImport(candidate, now).ok, false, `${field}: ${value}`);
+  }
+
+  const unknownVerification = makeVersionTwoWorkspaceWithSourceAssertion();
+  unknownVerification.deals[0]!.sourceAssertions[0]!.lastVerifiedAt = null;
+  assert.equal(validateImport(unknownVerification, now).ok, true);
+});
+
 test("legacy global buy-box markets migrate known labels without cross-state leakage", () => {
   const candidate = createEmptyData("2026-07-27T12:00:00.000Z") as unknown as {
     buyBox: Record<string, unknown>;
@@ -466,6 +541,42 @@ test("oversized workspace is rejected before setItem", () => {
 
   assert.equal(result.ok, false);
   assert.equal(storage.setItemCalls, 0);
+});
+
+test("backup restore rejects an oversized file before reading it", async () => {
+  let readCalls = 0;
+  const result = await readWorkspaceBackup(
+    {
+      size: MAX_WORKSPACE_BYTES + 1,
+      text: async () => {
+        readCalls += 1;
+        return "{}";
+      },
+    },
+    new Date("2026-07-28T12:00:00.000Z"),
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(readCalls, 0);
+  if (!result.ok) assert.match(result.errors[0] ?? "", /too large|4 MiB/i);
+});
+
+test("backup restore converts file read failures into a safe validation result", async () => {
+  const result = await readWorkspaceBackup(
+    {
+      size: 100,
+      text: async () => {
+        throw new Error("private filesystem detail");
+      },
+    },
+    new Date("2026-07-28T12:00:00.000Z"),
+  );
+
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.errors[0] ?? "", /could not be read/i);
+    assert.doesNotMatch(result.errors.join(" "), /private filesystem detail/i);
+  }
 });
 
 test("locked mutation reads latest data, validates, stamps, and increments revision", async () => {
