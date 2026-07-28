@@ -25,7 +25,7 @@ An operator can:
 - inspect each property’s source record, usage rights, confidence, freshness,
   conflicts, restrictions, qualification evidence, contact block, and next
   research task;
-- see a current dashboard snapshot with five launch qualification categories
+- see a current dashboard snapshot with five launch qualification statuses
   and the Task 5 research-priority order; and
 - export and restore the full versioned workspace as JSON.
 

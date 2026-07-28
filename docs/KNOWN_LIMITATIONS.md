@@ -28,8 +28,8 @@
 
 ### Qualification and reporting
 
-- Five launch categories are a presentation over the retained assessed-only
-  qualification engine; unavailable inputs remain unassessed.
+- Five launch evidence categories are a presentation over the retained
+  assessed-only qualification engine; unavailable inputs remain unassessed.
 - Current property records do not contain verified ownership evidence,
   comparable sets, full repair evidence, transaction costs, or real
   seller-provided fit by default.
@@ -39,6 +39,8 @@
   evidence is unavailable; it is not predicted transaction value.
 - The Dashboard is a current snapshot. It cannot report historical imports,
   score changes, pipeline changes, completed work, or daily event history.
+- Dashboard freshness and research priority use the page-load evaluation date;
+  reload the page to advance that date.
 - Counts can be factual zero; unsupported rates, values, and rankings display
   `Not enough data` or remain unavailable.
 

@@ -73,20 +73,27 @@ are unavailable. See [Data import](DATA_IMPORT.md) for the exact contract.
 The Dashboard is a current operating snapshot. It answers:
 
 - which buy-box version is active;
-- how many real records are in each launch qualification category;
+- how many real records are in each launch qualification status;
 - which records lack provenance, confidence, or verification;
 - which conflicts, restrictions, and contact blocks are active;
 - which research tasks have the highest current Task 5 priority; and
 - whether local storage can be written safely.
 
+Until browser storage has been successfully inspected, the Dashboard shows a
+loading boundary and withholds configuration, counts, priorities, and write
+claims. If storage is corrupt or unavailable, those facts remain `Not enough
+data`; open Pipeline to use the existing restore or clear controls.
+
 It is not a historical daily report. The local schema does not retain an event
 ledger, import batches, prior score results, or “what changed” history.
+Freshness and research priority use the Dashboard page-load date. Reload the
+page to refresh that date-sensitive evaluation.
 
 ## Review a property
 
 Each Pipeline property shows:
 
-- the five launch qualification categories;
+- the five launch evidence categories and resulting qualification status;
 - the assessed-only preliminary score or `Unavailable`;
 - exact positive and negative reasons;
 - missing or unknown facts;

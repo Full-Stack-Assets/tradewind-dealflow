@@ -8,6 +8,8 @@ assertions, conflicts, restrictions, and the evaluation date.
 
 Qualification is recalculated in the browser. It is not stored as an
 authoritative fact, and a high result never overrides a compliance block.
+The Dashboard captures its evaluation date when the page loads; reload it to
+refresh date-sensitive freshness and research-priority results.
 
 ## Launch buy box
 
@@ -131,10 +133,12 @@ Labels are:
 - 25–49: `Low`
 - 0–24: `Deferred`
 
-Identity, ownership, do-not-contact, and similar safety tasks receive critical
-handling. Generated comparable, repair, listing, buyer-proof, title/lien, and
-material-conflict research receives high task-class treatment. Exact task
-reasons remain visible.
+Identity disputes, ownership disputes, recorded ownership changes or stale
+ownership, do-not-contact, and similar explicit safety restrictions receive
+critical handling. Routine ownership verification is generated as research
+but does not by itself receive the `Critical` floor. Generated comparable,
+repair, listing, buyer-proof, title/lien, and material-conflict research
+receives high task-class treatment. Exact task reasons remain visible.
 
 ## Not implemented: underwriting case engine
 

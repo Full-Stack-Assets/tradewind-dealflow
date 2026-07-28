@@ -9,7 +9,10 @@ import {
   StatusPill,
   WorkspaceHeader,
 } from "@/components/WorkspaceShell";
-import { buildLeadOperatingSnapshot } from "@/lib/dashboard";
+import {
+  buildLeadOperatingSnapshot,
+  resolveLeadDashboardAccess,
+} from "@/lib/dashboard";
 import type { LaunchQualificationStatus } from "@/lib/launch-qualification";
 
 const LAUNCH_STATUSES: LaunchQualificationStatus[] = [
@@ -28,16 +31,20 @@ export function DashboardWorkspace() {
     storageMessage,
     writesSupported,
   } = useLocalData();
-  const snapshot = useMemo(
-    () => buildLeadOperatingSnapshot(data, new Date()),
-    [data],
-  );
-  const configuredMarkets = data.buyBox.states.map((state) => {
-    const markets = data.buyBox.marketsByState[state];
-    return `${state}: ${markets.length > 0 ? markets.join(", ") : "No county selected"}`;
+  const evaluationDate = useMemo(() => new Date(), []);
+  const access = resolveLeadDashboardAccess({
+    hydrated,
+    storageStatus,
+    writesSupported,
   });
-
-  return (
+  const snapshot = useMemo(
+    () =>
+      access.snapshotAvailable
+        ? buildLeadOperatingSnapshot(data, evaluationDate)
+        : null,
+    [access.snapshotAvailable, data, evaluationDate],
+  );
+  const dashboardHeader = (
     <>
       <WorkspaceHeader
         eyebrow="Milestone 1 · Lead engine"
@@ -50,13 +57,56 @@ export function DashboardWorkspace() {
         }
       />
       <LocalDataNotice />
+    </>
+  );
 
+  if (access.state === "loading") {
+    return (
+      <>
+        {dashboardHeader}
+        <DashboardAvailability
+          state="loading"
+          storageMessage={null}
+        />
+      </>
+    );
+  }
+
+  if (
+    access.state === "corrupt"
+    || access.state === "unavailable"
+    || snapshot === null
+  ) {
+    return (
+      <>
+        {dashboardHeader}
+        <DashboardAvailability
+          state={
+            access.state === "corrupt" ? "corrupt" : "unavailable"
+          }
+          storageMessage={storageMessage}
+        />
+      </>
+    );
+  }
+
+  const configuredMarkets = data.buyBox.states.map((state) => {
+    const markets = data.buyBox.marketsByState[state];
+    return `${state}: ${markets.length > 0 ? markets.join(", ") : "No county selected"}`;
+  });
+
+  return (
+    <>
+      {dashboardHeader}
       <aside className="snapshot-boundary">
-        <strong>Current snapshot—not an activity-history report.</strong>
+        <strong>
+          Current snapshot, evaluated at page load—not an activity-history
+          report.
+        </strong>
         <p>
-          The local schema does not retain historical audit events. Full
-          event-by-event audit reporting remains in the deferred server-backed
-          backlog.
+          Reload this page to refresh date-sensitive freshness and research
+          priority. The local schema does not retain historical audit events;
+          full event-by-event reporting remains deferred.
         </p>
       </aside>
 
@@ -107,7 +157,7 @@ export function DashboardWorkspace() {
           <div>
             <span className="mini-label">Current property records</span>
             <h2 id="qualification-counts-title">
-              Qualification by launch category
+              Qualification by launch status
             </h2>
           </div>
           <p>
@@ -280,7 +330,7 @@ export function DashboardWorkspace() {
           <div>
             <dt>Safe local writes</dt>
             <dd>
-              {writesSupported
+              {access.safeWritesAvailable
                 ? "Serialized writes available"
                 : "Unavailable · read and export only"}
             </dd>
@@ -307,6 +357,92 @@ export function DashboardWorkspace() {
         </p>
       </aside>
     </>
+  );
+}
+
+function DashboardAvailability({
+  state,
+  storageMessage,
+}: {
+  state: "loading" | "corrupt" | "unavailable";
+  storageMessage: string | null;
+}) {
+  const loading = state === "loading";
+  const corrupt = state === "corrupt";
+  return (
+    <section
+      className="panel dashboard-availability"
+      aria-labelledby="dashboard-system-health-title"
+      aria-busy={loading}
+    >
+      <div className="panel-heading">
+        <div>
+          <span className="mini-label">Can the local system operate?</span>
+          <h2 id="dashboard-system-health-title">
+            System and local storage
+          </h2>
+        </div>
+        <StatusPill tone={loading ? "neutral" : "blocked"}>
+          {loading
+            ? "Inspection pending"
+            : corrupt
+              ? "Corrupt workspace"
+              : "Workspace unavailable"}
+        </StatusPill>
+      </div>
+      <div
+        role={loading ? "status" : "alert"}
+        aria-live={loading ? "polite" : "assertive"}
+      >
+        <h3>
+          {loading
+            ? "Inspecting browser workspace"
+            : corrupt
+              ? "Workspace data could not be validated"
+              : "Workspace storage unavailable"}
+        </h3>
+        <p>
+          {loading
+            ? "Buy-box configuration, property counts, research priorities, and write capability are Not enough data until browser storage is successfully inspected."
+            : "Buy-box configuration, property counts, and research priorities are Not enough data because the browser workspace is not trusted."}
+        </p>
+        {storageMessage && <p className="muted-copy">{storageMessage}</p>}
+      </div>
+      <dl className="system-health-grid">
+        <div>
+          <dt>Browser snapshot</dt>
+          <dd>
+            {loading
+              ? "Inspection in progress"
+              : corrupt
+                ? "Corrupt"
+                : "Unavailable"}
+          </dd>
+        </div>
+        <div>
+          <dt>Safe local writes</dt>
+          <dd>{loading ? "Not evaluated" : "Unavailable"}</dd>
+        </div>
+        <div>
+          <dt>Recovery</dt>
+          <dd>
+            {loading ? (
+              "Wait for the local inspection to finish."
+            ) : (
+              <Link href="/pipeline">
+                Open Pipeline recovery controls
+              </Link>
+            )}
+          </dd>
+        </div>
+      </dl>
+      {!loading && (
+        <p className="muted-copy">
+          Restore and clear controls remain in Pipeline; this Dashboard does
+          not overwrite the unreadable workspace.
+        </p>
+      )}
+    </section>
   );
 }
 

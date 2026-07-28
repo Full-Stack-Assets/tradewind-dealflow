@@ -66,7 +66,7 @@ the controlling text before a campaign is activated.
 
 ## Rhode Island review
 
-[2026 Public Law Chapter 410](https://webserver.rilegislature.gov/PublicLaws/law26/law26411.htm)
+[2026 Public Law Chapter 410](https://webserver.rilegislature.gov/PublicLaws/law26/law26410.htm)
 is the official enacted H 7840 Substitute A source used by this product
 baseline. Its text states a January 1, 2027 effective date and contains the
 wholesaling provisions that counsel must verify for licensing, disclosures,

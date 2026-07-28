@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildLeadOperatingSnapshot } from "../lib/dashboard.ts";
+import {
+  buildLeadOperatingSnapshot,
+  resolveLeadDashboardAccess,
+} from "../lib/dashboard.ts";
 import { createEmptyData } from "../lib/import-export.ts";
 import type {
   DealFlowData,
@@ -97,6 +100,65 @@ function deal(
 function workspace(deals: DealRecord[]): DealFlowData {
   return { ...createEmptyData(NOW.toISOString()), deals };
 }
+
+test("pre-hydration dashboard access withholds snapshots and write claims", () => {
+  assert.deepEqual(
+    resolveLeadDashboardAccess({
+      hydrated: false,
+      storageStatus: "empty",
+      writesSupported: true,
+    }),
+    {
+      state: "loading",
+      snapshotAvailable: false,
+      safeWritesAvailable: false,
+    },
+  );
+});
+
+test("corrupt or unavailable storage withholds factual dashboard output", () => {
+  for (const storageStatus of ["corrupt", "unavailable"] as const) {
+    assert.deepEqual(
+      resolveLeadDashboardAccess({
+        hydrated: true,
+        storageStatus,
+        writesSupported: true,
+      }),
+      {
+        state: storageStatus,
+        snapshotAvailable: false,
+        safeWritesAvailable: false,
+      },
+    );
+  }
+});
+
+test("trusted hydration permits snapshots but write claims stay fail-closed", () => {
+  assert.deepEqual(
+    resolveLeadDashboardAccess({
+      hydrated: true,
+      storageStatus: "current",
+      writesSupported: true,
+    }),
+    {
+      state: "ready",
+      snapshotAvailable: true,
+      safeWritesAvailable: true,
+    },
+  );
+  assert.deepEqual(
+    resolveLeadDashboardAccess({
+      hydrated: true,
+      storageStatus: "unsupported-lock",
+      writesSupported: false,
+    }),
+    {
+      state: "ready",
+      snapshotAvailable: true,
+      safeWritesAvailable: false,
+    },
+  );
+});
 
 test("empty snapshot keeps factual counts at zero and has no invented priority", () => {
   const snapshot = buildLeadOperatingSnapshot(workspace([]), NOW);
