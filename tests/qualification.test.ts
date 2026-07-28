@@ -1249,6 +1249,26 @@ test("research tasks are derived in legal, ownership, data, underwriting, buyer,
   assert.match(result.recommendedAction, /identity disputed/i);
 });
 
+test("complete evidence still requires explicit ownership verification research", () => {
+  const result = qualifyDeal(
+    completeDeal(),
+    configuredBuyBox(),
+    evaluationDate,
+    completeContext(),
+  );
+
+  assert.deepEqual(
+    result.researchTasks.map(({ priority, category }) => [
+      priority,
+      category,
+    ]),
+    [[2, "Ownership verification"]],
+  );
+  assert.match(result.recommendedAction, /verify ownership/i);
+  assert.notEqual(result.researchPriority.label, "Deferred");
+  assert.ok(result.researchPriority.score > 0);
+});
+
 test("fully assessed disqualification emits only evidence-backed remediation tasks", () => {
   const result = qualifyDeal(
     completeDeal(),
@@ -1271,7 +1291,10 @@ test("fully assessed disqualification emits only evidence-backed remediation tas
       priority,
       category,
     ]),
-    [[4, "Underwriting impact"]],
+    [
+      [2, "Ownership verification"],
+      [4, "Underwriting impact"],
+    ],
   );
   assert.doesNotMatch(
     result.researchTasks.map(({ reason }) => reason).join(" "),
@@ -1311,6 +1334,15 @@ test("research priority is separate, disclosed, and uses the exact label bands",
     ),
   );
 
+  const staleOwnership = qualifyDeal(
+    completeDeal({ restriction: "Ownership stale" }),
+    configuredBuyBox(),
+    evaluationDate,
+    completeContext(),
+  ).researchPriority;
+  assert.equal(staleOwnership.label, "Critical");
+  assert.ok(staleOwnership.score >= 90 && staleOwnership.score <= 100);
+
   const high = qualifyDeal(
     completeDeal(),
     configuredBuyBox(),
@@ -1326,14 +1358,16 @@ test("research priority is separate, disclosed, and uses the exact label bands",
   assert.equal(high.label, "High");
   assert.ok(high.score >= 75 && high.score <= 89);
 
-  const deferred = qualifyDeal(
+  const ownershipResearch = qualifyDeal(
     completeDeal(),
     configuredBuyBox(),
     evaluationDate,
     completeContext(),
   ).researchPriority;
-  assert.equal(deferred.label, "Deferred");
-  assert.ok(deferred.score >= 0 && deferred.score <= 24);
+  assert.equal(ownershipResearch.label, "Low");
+  assert.ok(
+    ownershipResearch.score >= 25 && ownershipResearch.score <= 49,
+  );
 });
 
 test("research queue prioritizes legal risk before lower-impact tasks and keeps scored tie ordering stable", () => {
@@ -1392,17 +1426,17 @@ test("research queue prioritizes legal risk before lower-impact tasks and keeps 
         dealId: "score-a",
         queue: "Scored",
         rank: 1,
-        researchPriority: 0,
-        researchPriorityLabel: "Deferred",
-        researchTaskOrder: null,
+        researchPriority: 41,
+        researchPriorityLabel: "Low",
+        researchTaskOrder: 2,
       },
       {
         dealId: "score-b",
         queue: "Scored",
         rank: 2,
-        researchPriority: 0,
-        researchPriorityLabel: "Deferred",
-        researchTaskOrder: null,
+        researchPriority: 41,
+        researchPriorityLabel: "Low",
+        researchTaskOrder: 2,
       },
     ],
   );

@@ -2066,12 +2066,12 @@ function deriveResearchTasks(
   ) {
     tasks.push(task(1, "Legal/identity risk", "Attorney review", "Resolve active legal, identity, rights, or restriction risk."));
   }
-  if (
-    quality.missingProvenance
-    || result.disqualifiers.some((item) => /identity|ownership/i.test(item))
-  ) {
-    tasks.push(task(2, "Ownership verification", "Ownership", "Verify current ownership and a reliable property identity before progression."));
-  }
+  tasks.push(task(
+    2,
+    "Ownership verification",
+    "Ownership",
+    "The canonical record has no verified ownership evidence; verify current ownership and a reliable property identity before progression.",
+  ));
   if (
     quality.component.assessment === "Unassessed"
     || quality.component.missingInformation.length > 0
@@ -2146,7 +2146,7 @@ function deriveResearchPriority(
     ...result.restrictions.map(({ code, reason }) => `${code}: ${reason}`),
   ].join(" ");
   const criticalSafety =
-    /identity|ownership dispute|ownership change|do not contact|opt.?out|suppression failure|legal deadline|foreclosure|bankruptcy|probate|incapacity|attorney request/i
+    /identity|ownership dispute|ownership change|ownership stale|do not contact|opt.?out|suppression failure|legal deadline|foreclosure|bankruptcy|probate|incapacity|attorney request/i
       .test(combined);
   const highResearch =
     quality.unresolvedConflicts > 0

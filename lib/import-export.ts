@@ -120,6 +120,29 @@ function validFiniteNumber(value: unknown): value is number { return typeof valu
 function validNonnegativeInteger(value: unknown): value is number { return Number.isInteger(value) && validNonnegativeNumber(value); }
 function validNullableNonnegativeNumber(value: unknown): value is number | null { return value === null || validNonnegativeNumber(value); }
 function validScalar(value: unknown): value is string | number | null { return value === null || validString(value) || validFiniteNumber(value); }
+function validIsoTimestamp(value: unknown): value is string {
+  if (!validString(value)) return false;
+  const timestamp =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(Z|[+-]\d{2}:\d{2})$/u
+      .exec(value);
+  if (timestamp === null) return false;
+  const year = Number(timestamp[1]);
+  const month = Number(timestamp[2]);
+  const day = Number(timestamp[3]);
+  const hour = Number(timestamp[4]);
+  const minute = Number(timestamp[5]);
+  const second = Number(timestamp[6] ?? "0");
+  const calendar = new Date(Date.UTC(year, month - 1, day));
+  const validCalendar =
+    calendar.getUTCFullYear() === year
+    && calendar.getUTCMonth() === month - 1
+    && calendar.getUTCDate() === day;
+  return validCalendar
+    && hour <= 23
+    && minute <= 59
+    && second <= 59
+    && Number.isFinite(Date.parse(value));
+}
 
 function reconstructStringArray(raw: unknown): string[] | null {
   if (!validArray(raw) || !raw.every(validString)) return null;
@@ -268,7 +291,7 @@ function reconstructDealDeskDraft(raw: unknown): DealDeskDraft | null {
 
 function reconstructBuyBox(raw: unknown): BuyBoxConfig | null {
   const fields = ["configured", "version", "updatedAt", "states", "markets", "marketsByState", "propertyTypes", "minPrice", "maxPrice", "rehabLevels", "minimumConfidence", "maxVerificationAgeDays", "financialThresholds", "weights"];
-  if (!isRecord(raw) || !hasOnlyKeys(raw, fields) || typeof raw.configured !== "boolean" || !validNonnegativeInteger(raw.version) || !validString(raw.updatedAt) || !validArray(raw.states) || !raw.states.every(validState) || !validNullableNonnegativeNumber(raw.minPrice) || !validNullableNonnegativeNumber(raw.maxPrice) || !validArray(raw.rehabLevels) || !raw.rehabLevels.every(validRehab) || !validConfidence(raw.minimumConfidence) || !validNonnegativeInteger(raw.maxVerificationAgeDays) || !isRecord(raw.weights)) return null;
+  if (!isRecord(raw) || !hasOnlyKeys(raw, fields) || typeof raw.configured !== "boolean" || !validNonnegativeInteger(raw.version) || !validIsoTimestamp(raw.updatedAt) || !validArray(raw.states) || !raw.states.every(validState) || !validNullableNonnegativeNumber(raw.minPrice) || !validNullableNonnegativeNumber(raw.maxPrice) || !validArray(raw.rehabLevels) || !raw.rehabLevels.every(validRehab) || !validConfidence(raw.minimumConfidence) || !validNonnegativeInteger(raw.maxVerificationAgeDays) || !isRecord(raw.weights)) return null;
   const propertyTypes = reconstructStringArray(raw.propertyTypes);
   if (propertyTypes === null) return null;
   const defaults = createDefaultBuyBox(raw.updatedAt);
@@ -285,11 +308,13 @@ function reconstructBuyBox(raw: unknown): BuyBoxConfig | null {
   } else {
     const legacyMarkets = reconstructStringArray(raw.markets);
     if (legacyMarkets === null) return null;
-    marketsByState = migrateLegacyMarketsByState(
+    const migratedMarkets = migrateLegacyMarketsByState(
       legacyMarkets,
       raw.states as StateCode[],
       defaults,
     );
+    if (migratedMarkets === null) return null;
+    marketsByState = migratedMarkets;
   }
   const rawWeights = raw.weights as Record<string, unknown>;
   const legacyWeightKeys = ["geography", "propertyType", "price", "rehab", "dataQuality"];
@@ -362,7 +387,7 @@ function migrateLegacyMarketsByState(
   markets: string[],
   states: StateCode[],
   defaults: BuyBoxConfig,
-): BuyBoxConfig["marketsByState"] {
+): BuyBoxConfig["marketsByState"] | null {
   const result: BuyBoxConfig["marketsByState"] = { MA: [], RI: [] };
   const defaultSets = {
     MA: new Set(defaults.marketsByState.MA),
@@ -377,7 +402,10 @@ function migrateLegacyMarketsByState(
         assigned = true;
       }
     }
-    if (!assigned && states.length === 1) result[states[0]].push(market);
+    if (!assigned) {
+      if (states.length !== 1) return null;
+      result[states[0]].push(market);
+    }
   }
   result.MA = [...new Set(result.MA)].sort();
   result.RI = [...new Set(result.RI)].sort();

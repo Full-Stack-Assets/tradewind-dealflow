@@ -183,7 +183,34 @@ test("strict current buy-box imports reject invalid freshness, thresholds, and w
   }
 });
 
-test("legacy global buy-box markets migrate only to known states without cross-state leakage", () => {
+test("strict current buy-box imports reject malformed timestamps without throwing", () => {
+  for (const [configured, updatedAt] of [
+    [false, "not-a-date"],
+    [true, "July 27, 2026"],
+  ] as const) {
+    const candidate = createEmptyData("2026-07-27T12:00:00.000Z");
+    candidate.buyBox.configured = configured;
+    candidate.buyBox.updatedAt = updatedAt;
+    let result: ReturnType<typeof validateImport> | undefined;
+
+    assert.doesNotThrow(() => {
+      result = validateImport(candidate);
+    });
+    assert.equal(result?.ok, false, `${String(configured)}: ${updatedAt}`);
+  }
+});
+
+test("strict current buy-box import accepts a valid ISO timestamp with an explicit timezone", () => {
+  const candidate = createEmptyData("2026-07-27T12:00:00.000Z");
+  candidate.buyBox.updatedAt = "2026-07-27T08:00:00-04:00";
+
+  const result = validateImport(candidate);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.data.buyBox.updatedAt, "2026-07-27T08:00:00-04:00");
+});
+
+test("legacy global buy-box markets migrate known labels without cross-state leakage", () => {
   const candidate = createEmptyData("2026-07-27T12:00:00.000Z") as unknown as {
     buyBox: Record<string, unknown>;
   };
@@ -192,7 +219,6 @@ test("legacy global buy-box markets migrate only to known states without cross-s
     "Fall River",
     "Providence",
     "Bristol County",
-    "Unknown custom market",
   ];
   candidate.buyBox.states = ["MA", "RI"];
 
@@ -203,6 +229,21 @@ test("legacy global buy-box markets migrate only to known states without cross-s
     MA: ["bristol county", "fall river"],
     RI: ["bristol county", "providence"],
   });
+});
+
+test("legacy multi-state import rejects an ambiguous custom market instead of deleting it", () => {
+  const candidate = createEmptyData("2026-07-27T12:00:00.000Z") as unknown as {
+    buyBox: Record<string, unknown>;
+  };
+  delete candidate.buyBox.marketsByState;
+  candidate.buyBox.markets = [
+    "Fall River",
+    "Providence",
+    "Operator Custom Market",
+  ];
+  candidate.buyBox.states = ["MA", "RI"];
+
+  assert.equal(validateImport(candidate).ok, false);
 });
 
 test("pipeline CSV neutralizes spreadsheet formulas", () => {
