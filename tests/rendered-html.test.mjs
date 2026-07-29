@@ -151,14 +151,19 @@ test("dashboard withholds factual output until browser storage is hydrated", asy
   );
 });
 
-test("health endpoint reports the honest local-first release state", async () => {
+test("health endpoint reports the honest MassGIS ingestion release state", async () => {
   const response = await render("/healthz");
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^application\/json\b/i);
   assert.deepEqual(await response.json(), {
     status: "ok",
     service: "tradewind-dealflow",
-    release: "local-first",
+    release: "massgis-ingestion",
     outreach: "disabled",
+    ingestion: {
+      manual: "enabled",
+      scheduled: "enabled",
+      ownerContactFields: "disabled",
+    },
   });
 });

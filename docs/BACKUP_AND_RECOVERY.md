@@ -17,6 +17,12 @@ Clearing site data, storage eviction, private-mode cleanup, browser-profile
 damage, device loss, shared-profile access, or a malicious extension can erase
 or expose records.
 
+The D1 control plane separately stores the active/superseded MassGIS policies,
+run status and counts, owner/contact-free staged parcel records, and the
+append-only audit chain. Browser JSON export does not back up D1, and D1 does
+not back up the working local Pipeline. Follow the platform D1 backup process
+and periodically download the audit export in addition to browser backups.
+
 ## Create a recovery point
 
 1. Open **Pipeline**.
@@ -92,5 +98,7 @@ their own retention and deletion process.
 ## Application rollback versus data recovery
 
 A Sites rollback restores application code only. It does not change or recover
-browser data. Follow [Setup and deployment](DEPLOYMENT.md) for code rollback
-and this guide for user records.
+browser data or D1 rows. Pause the source schedule before rollback when
+possible, retain D1 for investigation, follow
+[Setup and deployment](DEPLOYMENT.md) for code rollback, and use this guide
+for local Pipeline records.

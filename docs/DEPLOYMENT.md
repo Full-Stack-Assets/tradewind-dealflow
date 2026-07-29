@@ -1,10 +1,10 @@
 # Setup and Deployment
 
-Release mode: local-first lead engine
+Release mode: MassGIS ingestion lead engine
 
 Hosting target: the existing private OpenAI Sites project
 
-Data backend: none
+Data backend: D1 control plane plus browser-local working Pipeline
 
 ## Local setup
 
@@ -15,7 +15,9 @@ npm ci
 npm run dev
 ```
 
-No provider credential is required. Do not add secrets, private email
+No MassGIS credential is required. The deployment must provide logical D1
+binding `DB`, apply `drizzle/0000_massgis_ingestion.sql`, and register hourly
+cron `0 * * * *`. Do not add secrets, private email
 addresses, seller records, buyer records, or production exports to source
 control.
 
@@ -42,8 +44,13 @@ alone is not a production release.
 {
   "status": "ok",
   "service": "tradewind-dealflow",
-  "release": "local-first",
-  "outreach": "disabled"
+  "release": "massgis-ingestion",
+  "outreach": "disabled",
+  "ingestion": {
+    "manual": "enabled",
+    "scheduled": "enabled",
+    "ownerContactFields": "disabled"
+  }
 }
 ```
 
@@ -62,9 +69,11 @@ opaque project ID; do not create a second site.
 5. Save a Sites version using the exact pushed commit SHA.
 6. Deploy only that saved version.
 7. Preserve the existing private access policy.
-8. Verify `/`, `/dashboard`, `/pipeline`, `/compliance`, and `/healthz`.
-9. Review production response headers and runtime logs.
-10. Record the commit SHA, saved-version ID, deployment URL, verification time,
+8. Apply the D1 migration and confirm the hourly cron registration.
+9. Verify `/`, `/dashboard`, `/sources`, `/pipeline`, `/compliance`, and
+   `/healthz`.
+10. Review production response headers and runtime logs.
+11. Record the commit SHA, saved-version ID, deployment URL, verification time,
     and rollback version in the release evidence ledger.
 
 Do not claim the current branch is deployed until those steps are complete.
@@ -87,7 +96,8 @@ unless the owner explicitly authorizes an access-policy change.
 
 ## Secrets and external services
 
-This milestone has no application secret and no provider mutation. Future
+This milestone has no application secret; MassGIS is a public query-only
+provider. Future
 authentication, PostgreSQL, object storage, monitoring, property data, email,
 SMS, or voice services must use the deployment secret manager. Never place a
 credential in frontend code, git history, documentation, logs, health
@@ -95,13 +105,15 @@ responses, screenshots, or project chat.
 
 ## Rollback
 
-1. Stop further promotion.
-2. Select the last verified saved Sites version.
-3. Deploy that saved version without rewriting git history.
-4. Verify the primary routes, `/healthz`, headers, and logs.
-5. Record the failed and restored versions and the operator’s time of action.
-6. Fix forward in a new reviewed commit.
+1. Stop further promotion and disable the active source schedule when the
+   current release remains operable.
+2. Export the audit and retain a D1 recovery point.
+3. Select the last verified saved Sites version.
+4. Deploy that saved version without rewriting git history or deleting D1.
+5. Verify the primary routes, `/healthz`, headers, private access, and logs.
+6. Record the failed and restored versions and the operator’s time of action.
+7. Fix forward in a new reviewed commit.
 
-Application rollback and user-data recovery are different operations. Sites
-can restore application code; it cannot restore browser records. Follow
+Application rollback and data recovery are different operations. Sites can
+restore application code; it cannot restore browser records or D1. Follow
 [Backup and recovery](BACKUP_AND_RECOVERY.md) for workspace data.

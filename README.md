@@ -1,6 +1,6 @@
 # Tradewind DealFlow
 
-Tradewind DealFlow is a local-first acquisition operations workspace for a
+Tradewind DealFlow is a controlled-intake acquisition operations workspace for a
 narrow Massachusetts and Rhode Island launch. The current milestone is the
 lead engine: authorized property intake, source preservation, transparent
 qualification, and prioritized research.
@@ -15,6 +15,11 @@ An operator can:
 
 - configure one versioned launch buy box for Bristol County, Massachusetts
   and/or Providence County, Rhode Island;
+- approve one versioned, owner-free MassGIS parcel policy;
+- run the same bounded retrieval manually or through the daily schedule;
+- inspect durable run counts, grouped exceptions, and the append-only audit
+  export;
+- import all safe staged records through one Web-Locked local batch;
 - download a blank property CSV template;
 - select an authorized CSV that is decoded, validated, and planned entirely in
   the browser;
@@ -35,11 +40,12 @@ money, or closing instructions.
 
 ## Deliberate boundary
 
-Records are stored under the versioned browser key
-`tradewind-dealflow:v2`. There is no project database, login, multi-device
-sync, persistent event audit, server-side backup, provider connection, or
-outreach send in this milestone. Clearing browser storage can erase the only
-working copy.
+Working Pipeline records are stored under the versioned browser key
+`tradewind-dealflow:v2`. A four-table D1 control plane stores only the approved
+MassGIS policy, runs, owner/contact-free staged parcel records, and append-only
+audit events. There is no multi-device workspace sync, server-side Pipeline
+backup, seller/contact provider connection, or outreach send. Clearing browser
+storage can erase the only working Pipeline copy.
 
 The existing Deal Lab and Buyers routes remain local educational utilities.
 They are not the deferred evidence-ranged underwriting case system or the
@@ -86,6 +92,7 @@ commit promotion, and private production health verification are tracked in
 | --- | --- |
 | `/dashboard` | Current buy-box, qualification, research, block, and storage snapshot |
 | `/pipeline` | Buy-box configuration, local CSV preview/apply, provenance review, and backup |
+| `/sources` | MassGIS policy approval, manual/scheduled runs, safe intake, exceptions, and audit |
 | `/compliance` | Educational state lanes and planning-only controls |
 | `/healthz` | Declares the local-first release and disabled outreach state |
 
@@ -96,10 +103,11 @@ Other existing routes are outside the fast-track Milestone 1 acceptance scope.
 1. [Setup and deployment](docs/DEPLOYMENT.md)
 2. [Operator manual](docs/OPERATOR_MANUAL.md)
 3. [Data-import guide](docs/DATA_IMPORT.md)
-4. [Scoring and underwriting boundary](docs/SCORING_AND_UNDERWRITING.md)
-5. [Compliance-review checklist](docs/COMPLIANCE_REVIEW_CHECKLIST.md)
-6. [Backup and recovery](docs/BACKUP_AND_RECOVERY.md)
-7. [Known limitations and deferred backlog](docs/KNOWN_LIMITATIONS.md)
+4. [MassGIS ingestion operations](docs/MASSGIS_INGESTION.md)
+5. [Scoring and underwriting boundary](docs/SCORING_AND_UNDERWRITING.md)
+6. [Compliance-review checklist](docs/COMPLIANCE_REVIEW_CHECKLIST.md)
+7. [Backup and recovery](docs/BACKUP_AND_RECOVERY.md)
+8. [Known limitations and deferred backlog](docs/KNOWN_LIMITATIONS.md)
 
 Existing architecture and security documents are historical references. The
 eight launch documents named in the Task 7 brief, including this README, are

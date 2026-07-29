@@ -5,8 +5,13 @@ export function GET() {
     {
       status: "ok",
       service: "tradewind-dealflow",
-      release: "local-first",
+      release: "massgis-ingestion",
       outreach: "disabled",
+      ingestion: {
+        manual: "enabled",
+        scheduled: "enabled",
+        ownerContactFields: "disabled",
+      },
     },
     {
       headers: {

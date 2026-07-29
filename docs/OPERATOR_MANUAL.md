@@ -1,6 +1,6 @@
 # Tradewind DealFlow Operator Manual
 
-Release: local-first lead engine
+Release: MassGIS ingestion lead engine
 
 Operating baseline: July 28, 2026
 
@@ -19,19 +19,38 @@ contact anyone.
 ## Shortest usable workflow
 
 1. Open **Pipeline** and review the active launch buy box.
-2. Download the blank CSV template.
-3. Fill it with records from one authorized source and preserve the
+2. Open **Sources**, review the owner-free MassGIS policy, and approve its exact
+   scope.
+3. Select **Run now** or wait for the daily schedule.
+4. Review safe, duplicate, changed, and grouped exception counts.
+5. Select **Import all safe records** once. Every new property enters
+   `Research`.
+6. For a non-MassGIS authorized source, download the blank CSV template.
+7. Fill it with records from one authorized source and preserve the
    source-provided identifiers.
-4. Select the file. It remains in the browser.
-5. Review every validation error, duplicate, changed snapshot, possible
+8. Select the file. It remains in the browser.
+9. Review every validation error, duplicate, changed snapshot, possible
    property match, source restriction, and potential conflict.
-6. Attach a possible match only when the listed property identity is reliable;
+10. Attach a possible match only when the listed property identity is reliable;
    otherwise hold it outside production.
-7. Apply safe records. Every new property enters `Research`.
-8. Open **Dashboard** and work the highest-priority research item.
-9. Return to **Pipeline**, review the property’s qualification and provenance,
+11. Apply safe records. Every new property enters `Research`.
+12. Open **Dashboard** and work the highest-priority research item.
+13. Return to **Pipeline**, review the property’s qualification and provenance,
    and record only evidence-backed conflict or restriction decisions.
-10. Export a JSON backup after meaningful changes.
+14. Export a JSON backup after meaningful changes and retain D1 audit/backups
+    under the separate operational process.
+
+## Operate MassGIS retrieval
+
+The initial editable scope uses Fall River town ID `95`, New Bedford town ID
+`201`, residential use codes `101`, `104`, `105`, and `111`, unit counts one
+through four, and a daily 02:00 `America/New_York` schedule. Approval covers
+only the displayed policy hash. Every material edit requires a new approval.
+
+Manual and scheduled runs use one runner. Exact reruns add no staged record.
+Changed fingerprints stage a conflict. Malformed or schema-drifted records are
+grouped as exceptions while safe pages remain durable. Download the audit from
+Sources when release, incident, or compliance evidence is required.
 
 ## Configure the launch buy box
 
