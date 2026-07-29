@@ -16,7 +16,7 @@
     "legacy:inspect": "node scripts/inspect-legacy-dealflow.mjs",
     "db:generate": "drizzle-kit generate",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .worktrees/**/dist"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
