@@ -1,5 +1,6 @@
 .git
-.openai
+.openai/*
+!.openai/hosting.json
 .vinext
 .wrangler
 dist
