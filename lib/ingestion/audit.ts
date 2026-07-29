@@ -45,7 +45,7 @@ function isPreviousHashConflict(error: unknown): boolean {
 
 export async function appendAuditEvent(
   db: D1Database,
-  stateChange: D1PreparedStatement,
+  stateChange: D1PreparedStatement | D1PreparedStatement[],
   event: AuditEventInput,
 ): Promise<AuditEvent> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -58,7 +58,7 @@ export async function appendAuditEvent(
       "INSERT INTO audit_events (id, occurred_at, actor_id, event_type, aggregate_type, aggregate_id, metadata_json, previous_hash, event_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     ).bind(event.id, event.occurredAt, event.actorId, event.eventType, event.aggregateType, event.aggregateId, event.metadataJson, previousHash, eventHash);
     try {
-      await db.batch([stateChange, insert]);
+      await db.batch([...(Array.isArray(stateChange) ? stateChange : [stateChange]), insert]);
       const stored = await db.prepare(
         "SELECT sequence, id, occurred_at, actor_id, event_type, aggregate_type, aggregate_id, metadata_json, previous_hash, event_hash FROM audit_events WHERE id = ?",
       ).bind(event.id).first<StoredAuditEvent>();

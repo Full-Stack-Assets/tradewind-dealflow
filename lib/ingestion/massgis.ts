@@ -51,6 +51,8 @@ export type FetchMassGisRecordsOptions = {
   retrievedAt?: string;
   timeoutMs?: number;
   now?: Date;
+  signal?: AbortSignal;
+  onPage?: (page: MassGisFetchResult) => Promise<void> | void;
 };
 
 class TransientMassGisError extends Error {}
@@ -284,13 +286,20 @@ function isTransientStatus(status: number): boolean {
   return status === 408 || status === 429 || status >= 500;
 }
 
-async function requestPage(url: URL, fetcher: typeof globalThis.fetch, timeoutMs: number): Promise<unknown> {
+async function requestPage(
+  url: URL,
+  fetcher: typeof globalThis.fetch,
+  timeoutMs: number,
+  signal?: AbortSignal,
+): Promise<unknown> {
   let lastError: unknown;
   for (let retry = 0; retry <= MAX_RETRIES; retry += 1) {
+    if (signal?.aborted) throw new DOMException("The ingestion run was cancelled.", "AbortError");
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const response = await fetcher(url.toString(), { signal: controller.signal });
+      const requestSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
+      const response = await fetcher(url.toString(), { signal: requestSignal });
       if (!response.ok) {
         if (isTransientStatus(response.status)) throw new TransientMassGisError(`MassGIS HTTP ${response.status}`);
         throw new Error(`MassGIS HTTP ${response.status}`);
@@ -298,6 +307,7 @@ async function requestPage(url: URL, fetcher: typeof globalThis.fetch, timeoutMs
       return await response.json();
     } catch (error) {
       lastError = error;
+      if (signal?.aborted) throw error;
       const timedOut = controller.signal.aborted || (error instanceof Error && error.name === "AbortError");
       if (!(error instanceof TransientMassGisError) && !timedOut) throw error;
       if (retry === MAX_RETRIES) break;
@@ -345,13 +355,19 @@ export async function fetchMassGisRecords(policy: SourcePolicy, options: FetchMa
   let previousObjectId = -1;
   let processedCount = 0;
   while (processedCount < approved.maxRecordsPerRun) {
+    if (options.signal?.aborted) throw new DOMException("The ingestion run was cancelled.", "AbortError");
     const remaining = approved.maxRecordsPerRun - processedCount;
     const count = Math.min(approved.pageSize, remaining);
     const params = buildQuery({ ...approved, pageSize: count }, offset, now);
     const url = new URL(approved.endpoint);
     url.search = params.toString();
-    const features = validateMassGisPageEnvelope(await requestPage(url, fetcher, timeoutMs), { ...approved, pageSize: count });
+    const features = validateMassGisPageEnvelope(
+      await requestPage(url, fetcher, timeoutMs, options.signal),
+      { ...approved, pageSize: count },
+    );
     if (features.length > count) throw new Error("MassGIS page exceeded requested count");
+    const pageRecords: MassGisCandidate[] = [];
+    const pageRejections: MassGisRecordRejection[] = [];
     for (const feature of features) {
       processedCount += 1;
       const objectId = usableObjectId(feature);
@@ -363,20 +379,26 @@ export async function fetchMassGisRecords(policy: SourcePolicy, options: FetchMa
       try {
         current = validateFeature(feature, approved.outFields, true);
       } catch (error) {
-        rejections.push(recordRejection(feature, error));
+        const rejection = recordRejection(feature, error);
+        rejections.push(rejection);
+        pageRejections.push(rejection);
         continue;
       }
       let candidate: MassGisCandidate;
       try {
         candidate = normalizeMassGisRecord(current, retrievedAt);
       } catch (error) {
-        rejections.push(recordRejection(current, error));
+        const rejection = recordRejection(current, error);
+        rejections.push(rejection);
+        pageRejections.push(rejection);
         continue;
       }
       if (identities.has(candidate.sourceIdentity)) throw new Error("duplicate source identity in MassGIS pagination");
       identities.add(candidate.sourceIdentity);
       records.push(candidate);
+      pageRecords.push(candidate);
     }
+    await options.onPage?.({ records: pageRecords, rejections: pageRejections });
     if (features.length < count) break;
     offset += features.length;
   }
