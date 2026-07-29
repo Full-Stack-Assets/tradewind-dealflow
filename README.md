@@ -94,9 +94,24 @@ commit promotion, and private production health verification are tracked in
 | `/pipeline` | Buy-box configuration, local CSV preview/apply, provenance review, and backup |
 | `/sources` | MassGIS policy approval, manual/scheduled runs, safe intake, exceptions, and audit |
 | `/compliance` | Educational state lanes and planning-only controls |
-| `/healthz` | Declares the local-first release and disabled outreach state |
+| `/healthz` | Declares the MassGIS-ingestion release and disabled outreach state |
 
 Other existing routes are outside the fast-track Milestone 1 acceptance scope.
+
+## Consolidated foundation
+
+The current TypeScript application remains the only product source of truth.
+Reviewed archives stay external and read-only; this repository contains only
+sanitized manifests, typed migration contracts, synthetic parity fixtures,
+row-free inspection, and reconciliation logic.
+
+- [MassGIS consolidation provenance](docs/migration/MASSGIS_INTEGRATION_EVIDENCE.md)
+- [Legacy asset register](docs/migration/LEGACY_ASSET_REGISTER.md)
+- [Legacy consolidation contract](docs/migration/LEGACY_CONSOLIDATION.md)
+
+The configurable reference underwriting module preserves a verified legacy
+formula and the minimum-approved-comparable gate. It is not wired to the
+educational Deal Lab, formal offer preparation, or any transaction action.
 
 ## Launch documentation
 

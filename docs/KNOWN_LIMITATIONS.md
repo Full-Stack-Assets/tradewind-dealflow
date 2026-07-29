@@ -49,6 +49,21 @@
   reload the page to advance that date.
 - Counts can be factual zero; unsupported rates, values, and rankings display
   `Not enough data` or remain unavailable.
+- The configurable underwriting reference engine is parity evidence only. It
+  is not wired to Deal Lab, formal offers, or production property decisions,
+  and it is not an appraisal or legal approval.
+
+### Legacy consolidation
+
+- No raw legacy production record has been migrated.
+- The database inspection tool emits expected table names, column names,
+  counts, and lifecycle-state totals only; it never emits row values.
+- Raw databases, real lead/comparable exports, proof-of-funds files, and
+  extracted archives remain outside the repository.
+- Organization identity, tenant authorization, and durable lifecycle
+  persistence remain deferred to the next platform-foundation subsystem.
+- Reference parity demonstrates reproducible behavior, not valuation,
+  appraisal, legal approval, or permission to generate a formal offer.
 
 ### Revenue-loop milestones not implemented
 
