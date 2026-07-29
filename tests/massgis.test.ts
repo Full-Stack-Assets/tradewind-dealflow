@@ -168,6 +168,42 @@ test("never requests more records than the approved run cap", async () => {
   assert.deepEqual(counts, ["60", "40"]);
 });
 
+test("rejected full pages consume the approved run cap", async () => {
+  const counts: string[] = [];
+  const result = await fetchMassGisRecords(validPolicy({ pageSize: 50, maxRecordsPerRun: 100 }), {
+    fetch: async (input) => {
+      const url = new URL(input.toString());
+      const count = Number(url.searchParams.get("resultRecordCount"));
+      counts.push(String(count));
+      const offset = Number(url.searchParams.get("resultOffset"));
+      return new Response(JSON.stringify({
+        features: Array.from({ length: count }, (_, index) => feature({
+          OBJECTID: offset === 0 && index === 0 ? "not-an-object-id" : offset + index + 1,
+          GlobalID: `rejected-${offset + index + 1}`,
+          OWNER1: "must-not-retain",
+        })),
+      }), { status: 200 });
+    },
+  });
+  assert.deepEqual(result.records, []);
+  assert.equal(result.rejections.length, 100);
+  assert.deepEqual(result.rejections[0], { sourceRecordId: null, reason: "invalid-number" });
+  assert.deepEqual(counts, ["50", "50"]);
+  assert.doesNotMatch(JSON.stringify(result.rejections), /must-not-retain/);
+});
+
+test("a rejected record cannot hide a decreasing object ID", async () => {
+  await assert.rejects(
+    () => fetchMassGisRecords(validPolicy({ pageSize: 2, maxRecordsPerRun: 100 }), {
+      fetch: async () => new Response(JSON.stringify({ features: [
+        feature({ OBJECTID: 2, GlobalID: "two" }),
+        feature({ OBJECTID: 1, GlobalID: "one", OWNER1: "must-not-retain" }),
+      ] }), { status: 200 }),
+    }),
+    /decreasing object ID/i,
+  );
+});
+
 test("retries only transient responses and rejects decreasing object IDs", async () => {
   let attempts = 0;
   const transientResult = await fetchMassGisRecords(validPolicy({ pageSize: 2, maxRecordsPerRun: 100 }), {

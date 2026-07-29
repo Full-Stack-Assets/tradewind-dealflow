@@ -308,10 +308,15 @@ async function requestPage(url: URL, fetcher: typeof globalThis.fetch, timeoutMs
   throw new Error(`MassGIS transient request failed after ${MAX_RETRIES} retries: ${lastError instanceof Error ? lastError.message : "unknown error"}`);
 }
 
-function sourceRecordId(feature: unknown): string | null {
+function usableObjectId(feature: unknown): number | null {
   if (!isRecord(feature) || !isRecord(feature.attributes)) return null;
   const objectId = feature.attributes.OBJECTID;
-  return typeof objectId === "number" && Number.isInteger(objectId) && objectId >= 0 ? String(objectId) : null;
+  return typeof objectId === "number" && Number.isInteger(objectId) && objectId >= 0 ? objectId : null;
+}
+
+function sourceRecordId(feature: unknown): string | null {
+  const objectId = usableObjectId(feature);
+  return objectId === null ? null : String(objectId);
 }
 
 function recordRejection(feature: unknown, error: unknown): MassGisRecordRejection {
@@ -338,8 +343,9 @@ export async function fetchMassGisRecords(policy: SourcePolicy, options: FetchMa
   const identities = new Set<string>();
   let offset = 0;
   let previousObjectId = -1;
-  while (records.length < approved.maxRecordsPerRun) {
-    const remaining = approved.maxRecordsPerRun - records.length;
+  let processedCount = 0;
+  while (processedCount < approved.maxRecordsPerRun) {
+    const remaining = approved.maxRecordsPerRun - processedCount;
     const count = Math.min(approved.pageSize, remaining);
     const params = buildQuery({ ...approved, pageSize: count }, offset, now);
     const url = new URL(approved.endpoint);
@@ -347,6 +353,12 @@ export async function fetchMassGisRecords(policy: SourcePolicy, options: FetchMa
     const features = validateMassGisPageEnvelope(await requestPage(url, fetcher, timeoutMs), { ...approved, pageSize: count });
     if (features.length > count) throw new Error("MassGIS page exceeded requested count");
     for (const feature of features) {
+      processedCount += 1;
+      const objectId = usableObjectId(feature);
+      if (objectId !== null) {
+        if (objectId < previousObjectId) throw new Error("decreasing object ID in MassGIS pagination");
+        previousObjectId = objectId;
+      }
       let current: MassGisFeature;
       try {
         current = validateFeature(feature, approved.outFields, true);
@@ -354,9 +366,6 @@ export async function fetchMassGisRecords(policy: SourcePolicy, options: FetchMa
         rejections.push(recordRejection(feature, error));
         continue;
       }
-      const objectId = current.attributes.OBJECTID as number;
-      if (objectId < previousObjectId) throw new Error("decreasing object ID in MassGIS pagination");
-      previousObjectId = objectId;
       let candidate: MassGisCandidate;
       try {
         candidate = normalizeMassGisRecord(current, retrievedAt);
