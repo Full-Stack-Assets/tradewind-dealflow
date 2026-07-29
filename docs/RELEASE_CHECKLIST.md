@@ -74,9 +74,13 @@ unchecked until their corresponding release steps complete.
 - [x] `npm audit --omit=dev` — 0 production vulnerabilities.
 - [x] Full dependency graph updated/reviewed for the development-only
       `brace-expansion <=5.0.7` advisory; patched dependency or documented
-      release disposition: `npm ls brace-expansion --all` resolves to 5.0.8
-      through `eslint-config-next` and 1.1.16 through `eslint`; both paths are
-      development tooling.
+      release disposition: the `eslint-config-next` path resolves to patched
+      5.0.8. ESLint still resolves 1.1.16 through `minimatch@3`; npm publishes
+      no patched 1.x release, and forcing 5.0.8 breaks that legacy CommonJS API.
+      Accept GHSA-mh99-v99m-4gvg for development lint tooling only until ESLint
+      upgrades its dependency chain. The production audit reports zero
+      vulnerabilities, and no `brace-expansion` file is present in the
+      standalone deployment output.
 - [x] Runtime starts from the exact final local production output.
 - [ ] Production `/`, `/dashboard`, `/pipeline`, `/compliance`, and `/healthz`
       return successfully.
