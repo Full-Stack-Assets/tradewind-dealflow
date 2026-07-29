@@ -1,0 +1,27 @@
+[
+  {
+    "id": "synthetic-ready-001",
+    "evidence": {
+      "arv": 300000,
+      "repairs": 50000,
+      "approvedComparableCount": 4
+    },
+    "expected": {
+      "status": "ready",
+      "maximumPrice": 139000,
+      "offerLadder": [122320, 130660, 139000]
+    }
+  },
+  {
+    "id": "synthetic-blocked-001",
+    "evidence": {
+      "arv": 300000,
+      "repairs": 50000,
+      "approvedComparableCount": 2
+    },
+    "expected": {
+      "status": "blocked",
+      "reason": "At least 3 approved comparable sales are required."
+    }
+  }
+]
