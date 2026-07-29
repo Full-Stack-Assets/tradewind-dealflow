@@ -5,45 +5,83 @@ import {
   useCallback,
   useContext,
   useMemo,
+  useState,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
 
+import { createEmptyData } from "@/lib/import-export";
 import {
-  createEmptyData,
+  clearStoredWorkspace,
+  LEGACY_LOCAL_DATA_KEY,
   LOCAL_DATA_KEY,
-  validateImport,
-} from "@/lib/import-export";
+  mutateStoredWorkspace,
+  readStoredWorkspace,
+  replaceStoredWorkspace,
+  type MutationResult,
+  type StorageReadResult,
+  type WorkspaceLockManager,
+} from "@/lib/local-storage";
 import type { DealFlowData } from "@/lib/types";
+
+export type StorageStatus =
+  | StorageReadResult["status"]
+  | "unsupported-lock"
+  | "invalid"
+  | "too-large"
+  | "quota"
+  | "unavailable";
 
 type DataContextValue = {
   data: DealFlowData;
   hydrated: boolean;
-  updateData: (updater: (current: DealFlowData) => DealFlowData) => void;
-  replaceData: (next: DealFlowData) => void;
-  clearData: () => void;
+  updateData: (
+    updater: (current: DealFlowData) => DealFlowData,
+  ) => Promise<MutationResult>;
+  replaceData: (next: DealFlowData) => Promise<MutationResult>;
+  clearData: () => Promise<MutationResult>;
+  storageReadStatus: StorageReadResult["status"];
+  storageMutationIssue:
+    | Exclude<MutationResult, { ok: true }>["code"]
+    | null;
+  storageStatus: StorageStatus;
+  storageMessage: string | null;
+  writesSupported: boolean;
 };
 
-const BOOTSTRAP_TIME = "2026-07-27T00:00:00.000Z";
-const EMPTY_SERIALIZED = JSON.stringify(createEmptyData(BOOTSTRAP_TIME));
-const LOCAL_CHANGE_EVENT = "tradewind-dealflow:local-change";
-const DataContext = createContext<DataContextValue | null>(null);
+type MutationIssue = Exclude<MutationResult, { ok: true }>;
 
-function stamp(data: DealFlowData): DealFlowData {
-  return { ...data, updatedAt: new Date().toISOString() };
-}
+const BOOTSTRAP_TIME = "2026-07-27T00:00:00.000Z";
+const EMPTY_DATA = createEmptyData(BOOTSTRAP_TIME);
+const EMPTY_SERIALIZED = JSON.stringify(EMPTY_DATA);
+const LOCAL_CHANGE_EVENT = "tradewind-dealflow:local-change";
+const UNSUPPORTED_LOCK_MESSAGE =
+  "This browser cannot safely save workspace changes because Web Locks are unavailable. Read and export remain available.";
+const DataContext = createContext<DataContextValue | null>(null);
 
 function serverSnapshot() {
   return `server:${EMPTY_SERIALIZED}`;
 }
 
 function clientSnapshot() {
-  return `client:${window.localStorage.getItem(LOCAL_DATA_KEY) ?? EMPTY_SERIALIZED}`;
+  try {
+    return `client:${JSON.stringify([
+      window.localStorage.getItem(LOCAL_DATA_KEY),
+      window.localStorage.getItem(LEGACY_LOCAL_DATA_KEY),
+    ])}`;
+  } catch {
+    return "client:unavailable";
+  }
 }
 
 function subscribe(onStoreChange: () => void) {
   const onStorage = (event: StorageEvent) => {
-    if (event.key === LOCAL_DATA_KEY) onStoreChange();
+    if (
+      event.key === LOCAL_DATA_KEY ||
+      event.key === LEGACY_LOCAL_DATA_KEY
+    ) {
+      onStoreChange();
+    }
   };
   window.addEventListener("storage", onStorage);
   window.addEventListener(LOCAL_CHANGE_EVENT, onStoreChange);
@@ -53,19 +91,61 @@ function subscribe(onStoreChange: () => void) {
   };
 }
 
-function persist(data: DealFlowData) {
-  window.localStorage.setItem(LOCAL_DATA_KEY, JSON.stringify(data));
-  window.dispatchEvent(new Event(LOCAL_CHANGE_EVENT));
+function parseSnapshot(snapshot: string): StorageReadResult {
+  if (snapshot.startsWith("server:")) {
+    return {
+      status: "empty",
+      data: EMPTY_DATA,
+      message: null,
+    };
+  }
+  if (snapshot === "client:unavailable") {
+    return {
+      status: "corrupt",
+      message:
+        "Stored browser data is unavailable. Check browser storage permissions before restoring, clearing, or changing the workspace.",
+    };
+  }
+
+  try {
+    const [current, legacy]: [string | null, string | null] = JSON.parse(
+      snapshot.slice("client:".length),
+    );
+    return readStoredWorkspace(
+      {
+        getItem(key) {
+          if (key === LOCAL_DATA_KEY) return current;
+          if (key === LEGACY_LOCAL_DATA_KEY) return legacy;
+          return null;
+        },
+      },
+      new Date(),
+    );
+  } catch {
+    return {
+      status: "corrupt",
+      message:
+        "Stored browser data could not be validated. Restore a backup or clear the workspace before making changes.",
+    };
+  }
 }
 
-function parseSnapshot(snapshot: string): DealFlowData {
-  const serialized = snapshot.slice(snapshot.indexOf(":") + 1);
-  try {
-    const result = validateImport(JSON.parse(serialized));
-    return result.ok ? result.data : createEmptyData(BOOTSTRAP_TIME);
-  } catch {
-    return createEmptyData(BOOTSTRAP_TIME);
+function getBrowserLocks(): WorkspaceLockManager | null {
+  if (
+    typeof navigator === "undefined" ||
+    !("locks" in navigator) ||
+    typeof navigator.locks?.request !== "function"
+  ) {
+    return null;
   }
+  return {
+    request<T>(name: string, callback: () => Promise<T> | T) {
+      return navigator.locks.request(
+        name,
+        () => Promise.resolve(callback()),
+      ) as Promise<T>;
+    },
+  };
 }
 
 export function LocalDataProvider({ children }: { children: ReactNode }) {
@@ -74,29 +154,95 @@ export function LocalDataProvider({ children }: { children: ReactNode }) {
     clientSnapshot,
     serverSnapshot,
   );
-  const data = useMemo(() => parseSnapshot(snapshot), [snapshot]);
+  const readResult = useMemo(() => parseSnapshot(snapshot), [snapshot]);
+  const [mutationIssue, setMutationIssue] = useState<MutationIssue | null>(null);
   const hydrated = snapshot.startsWith("client:");
+  const writesSupported = !hydrated || getBrowserLocks() !== null;
+  const data =
+    readResult.status === "corrupt" ? EMPTY_DATA : readResult.data;
+
+  const finishMutation = useCallback((result: MutationResult) => {
+    if (result.ok) {
+      setMutationIssue(null);
+      window.dispatchEvent(new Event(LOCAL_CHANGE_EVENT));
+    } else {
+      setMutationIssue(result);
+    }
+    return result;
+  }, []);
 
   const updateData = useCallback(
-    (updater: (current: DealFlowData) => DealFlowData) => {
-      const latest = parseSnapshot(clientSnapshot());
-      persist(stamp(updater(latest)));
+    async (updater: (current: DealFlowData) => DealFlowData) => {
+      const result = await mutateStoredWorkspace(
+        window.localStorage,
+        getBrowserLocks(),
+        updater,
+      );
+      return finishMutation(result);
     },
-    [],
+    [finishMutation],
   );
 
-  const replaceData = useCallback((next: DealFlowData) => {
-    persist(stamp(next));
-  }, []);
+  const replaceData = useCallback(
+    async (next: DealFlowData) => {
+      const result = await replaceStoredWorkspace(
+        window.localStorage,
+        getBrowserLocks(),
+        next,
+      );
+      return finishMutation(result);
+    },
+    [finishMutation],
+  );
 
-  const clearData = useCallback(() => {
-    window.localStorage.removeItem(LOCAL_DATA_KEY);
-    window.dispatchEvent(new Event(LOCAL_CHANGE_EVENT));
-  }, []);
+  const clearData = useCallback(async () => {
+    const result = await clearStoredWorkspace(
+      window.localStorage,
+      getBrowserLocks(),
+    );
+    return finishMutation(result);
+  }, [finishMutation]);
+
+  const storageStatus: StorageStatus = mutationIssue
+    ? mutationIssue.code
+    : readResult.status === "corrupt"
+      ? "corrupt"
+      : !writesSupported
+        ? "unsupported-lock"
+        : readResult.status;
+  const storageMessage = mutationIssue
+    ? mutationIssue.message
+    : readResult.status === "corrupt"
+      ? readResult.message
+      : !writesSupported
+        ? UNSUPPORTED_LOCK_MESSAGE
+        : readResult.message;
 
   const value = useMemo(
-    () => ({ data, hydrated, updateData, replaceData, clearData }),
-    [clearData, data, hydrated, replaceData, updateData],
+    () => ({
+      data,
+      hydrated,
+      updateData,
+      replaceData,
+      clearData,
+      storageReadStatus: readResult.status,
+      storageMutationIssue: mutationIssue?.code ?? null,
+      storageStatus,
+      storageMessage,
+      writesSupported,
+    }),
+    [
+      clearData,
+      data,
+      hydrated,
+      replaceData,
+      readResult.status,
+      storageMessage,
+      storageStatus,
+      mutationIssue?.code,
+      updateData,
+      writesSupported,
+    ],
   );
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;

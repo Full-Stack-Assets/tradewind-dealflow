@@ -56,7 +56,7 @@ function safeNumber(value: string) {
 }
 
 export function DealLabWorkspace() {
-  const { data, updateData } = useLocalData();
+  const { data, updateData, writesSupported } = useLocalData();
   const [form, setForm] = useState<FormState>(blankForm);
   const [message, setMessage] = useState("");
   const [deleteAnalysisId, setDeleteAnalysisId] = useState<string | null>(null);
@@ -105,7 +105,7 @@ export function DealLabWorkspace() {
     }));
   };
 
-  const saveAnalysis = () => {
+  const saveAnalysis = async () => {
     if (!mao.ok || !heuristic.ok || !evidenceReady) {
       setMessage("Complete the required evidence and valid cost inputs before saving.");
       return;
@@ -131,10 +131,14 @@ export function DealLabWorkspace() {
       repairEvidence: form.repairEvidence.trim(),
       riskNotes: form.riskNotes.trim(),
     };
-    updateData((current) => ({
+    const result = await updateData((current) => ({
       ...current,
       analyses: [analysis, ...current.analyses],
     }));
+    if (!result.ok) {
+      setMessage(result.message);
+      return;
+    }
     setMessage("Analysis saved locally. No offer was created or sent.");
   };
 
@@ -185,14 +189,18 @@ export function DealLabWorkspace() {
     window.scrollTo({ top: 0 });
   };
 
-  const removeAnalysis = () => {
+  const removeAnalysis = async () => {
     if (!deleteAnalysisId) return;
-    updateData((current) => ({
+    const result = await updateData((current) => ({
       ...current,
       analyses: current.analyses.filter(
         (analysis) => analysis.id !== deleteAnalysisId,
       ),
     }));
+    if (!result.ok) {
+      setMessage(result.message);
+      return;
+    }
     setDeleteAnalysisId(null);
     setMessage("Saved analysis deleted from this browser.");
   };
@@ -394,7 +402,7 @@ export function DealLabWorkspace() {
           </section>
 
           <div className="stack-actions">
-            <button className="button button-primary" type="button" onClick={saveAnalysis}>
+            <button className="button button-primary" type="button" disabled={!writesSupported} onClick={saveAnalysis}>
               Save analysis locally
             </button>
             <button className="button button-quiet" type="button" onClick={exportSummary}>
@@ -452,6 +460,7 @@ export function DealLabWorkspace() {
                   <button
                     className="button button-danger button-small"
                     type="button"
+                    disabled={!writesSupported}
                     onClick={() => setDeleteAnalysisId(analysis.id)}
                   >
                     Delete

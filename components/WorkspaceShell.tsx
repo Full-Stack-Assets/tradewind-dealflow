@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { Brand } from "./Brand";
-import { LocalDataProvider } from "./LocalDataProvider";
+import { LocalDataProvider, useLocalData } from "./LocalDataProvider";
 
 const navigation = [
   { href: "/dashboard", label: "Dashboard", glyph: "⌂" },
@@ -74,6 +74,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
             ))}
           </nav>
           <main id="main-content" className="workspace-main">
+            <StorageStatusNotice />
             {children}
           </main>
           <footer className="workspace-footer">
@@ -86,6 +87,21 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         </div>
       </div>
     </LocalDataProvider>
+  );
+}
+
+function StorageStatusNotice() {
+  const { storageMessage } = useLocalData();
+  if (storageMessage === null) return null;
+  return (
+    <aside className="local-notice storage-status-notice" role="status">
+      <span className="local-notice-icon" aria-hidden="true">
+        !
+      </span>
+      <p>
+        <strong>Browser storage status.</strong> {storageMessage}
+      </p>
+    </aside>
   );
 }
 

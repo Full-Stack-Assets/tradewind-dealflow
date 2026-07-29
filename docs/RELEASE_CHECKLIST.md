@@ -1,76 +1,88 @@
-# Production Release Checklist
+# Milestone 1 Release Evidence Ledger
 
-## Last verification run
+Internal Task 8 ledger. Do not use an unchecked item as a production claim.
 
-- Date: 2026-07-28
-- Commit target: `c5643831e3b4e2de566d7724f662e088f7c9574c` (current working head)
-- Test gates run in this pass:
-  - `npm run test` → pass (`tests 13`, `pass 13`)
-  - `npm run typecheck` → pass
-  - `npm run lint` → pass after excluding `.worktrees/**/dist` from lint scope
-  - `npm run build` → pass
-  - `npm run test:render` → pass (`tests 13`, `pass 13`)
-  - `npm audit` → fails only due dev-chain advisory (`brace-expansion` via `minimatch` in eslint toolchain)
-  - `npm audit --omit=dev` → pass
+Candidate commit: ____________________
 
-- Runtime route checks on local production build (`node dist/standalone/server.js`):
-  - `GET /` → 200 and rendered.
-  - `GET /dashboard` → 200 and rendered.
-  - `GET /pipeline` → 200 and rendered.
-  - `GET /healthz` → 200 JSON `{ "status":"ok","service":"tradewind-dealflow","release":"local-first","outreach":"disabled" }`
-- Header checks on `/` and workspace routes include security headers (`content-security-policy`, `x-frame-options`, `x-content-type-options`, `referrer-policy`) and no cache on `/healthz`.
+Saved Sites version: ____________________
 
-## Product integrity
+Private deployment URL: ____________________
 
-- [ ] Public site contains no fabricated property, buyer, testimonial, revenue,
-      deal-count, scarcity, urgency, or performance claim.
-- [ ] Empty workspaces explain how to add real records.
-- [ ] Pricing and limitations match the approved product direction.
-- [ ] “90-Day First-Deal Execution System” is described as a process, not a
-      guarantee.
-- [ ] Outreach, submission, contracts, payments, and provider mutations remain
-      disabled.
+Rollback version: ____________________
 
-## Functional verification
+Verification time/operator: ____________________
 
-- [x] `npm test` passes from the release source.
-- [x] `npm run typecheck` passes.
-- [x] `npm run lint` passes.
-- [x] JSON import rejects incompatible and malformed nested records.
-- [ ] Valid import requires replacement confirmation.
-- [ ] Record delete and full clear require confirmation.
-- [x] MAO and heuristic labels are correct.
-- [x] Buyer matching displays reasons and conflicts.
-- [x] Rhode Island seller and assignee windows remain separate.
-- [x] Unknown holiday calendar keeps Rhode Island readiness blocked.
+## Scope and data integrity
 
-## Accessibility and responsive review
+- [ ] No fabricated production property, seller, buyer, comparable,
+      communication, approval, revenue, or performance record.
+- [ ] Empty production storage contains configuration only.
+- [ ] Imported records enter `Research`.
+- [ ] Exact reimports and same-file duplicates write nothing.
+- [ ] Possible matches remain held until operator resolution.
+- [ ] Changed facts preserve snapshots and visible conflicts.
+- [ ] Restricted source rights retain the contact block.
+- [ ] Dashboard uses current real browser data and does not invent history.
+- [ ] No seller, buyer, underwriting, provider, outreach, Academy, billing, AI,
+      backend, or public-marketplace work entered the Milestone 1 increment.
 
-- [ ] Skip link is visible on keyboard focus and moves to main content.
-- [ ] Every interactive control is reachable and visibly focused.
-- [ ] Forms have programmatic labels and descriptive errors.
-- [ ] Dialog focus and Escape/cancel behavior are reviewed.
-- [ ] Layout is usable at 320 px, 390 px, tablet, and desktop widths.
-- [ ] Reduced-motion preference is honored.
-- [ ] Color and status are not the only carriers of meaning.
+## Automated gate
 
-## Compliance and privacy
+- [ ] `npm run test:unit` — result/count: ____________________
+- [ ] `npm run typecheck` — result: ____________________
+- [ ] `npm run lint` — result: ____________________
+- [ ] `npm run build` — result: ____________________
+- [ ] `npm run test:render` — result/count: ____________________
+- [ ] `git diff --check` — result: ____________________
+- [ ] Import idempotency and stale-plan checks pass.
+- [ ] JSON corrupt/legacy/oversize/restore checks pass.
+- [ ] `/healthz` contract and response security headers pass.
 
-- [ ] Massachusetts and Rhode Island lanes display in the correct context.
-- [ ] January 1, 2027 Rhode Island alert is permanent and sourced.
-- [ ] Every legal summary is dated, linked, and presented as educational.
-- [ ] Counsel reviewed any changed legal or outreach copy.
-- [ ] No analytics or telemetry receives addresses, contacts, buyer data, or
-      free-form notes.
-- [ ] Browser-storage/data-loss notice is prominent.
-- [x] Security headers are present in the production response.
+## Browser and accessibility gate
 
-## Deployment
+- [ ] Desktop Dashboard and Pipeline visual review.
+- [ ] 320 px, 390 px, tablet, and desktop layout review.
+- [ ] Keyboard-only navigation, skip link, focus order, and visible focus.
+- [ ] File preview focus and cancel/apply focus return.
+- [ ] Buy-box error association and first-invalid focus.
+- [ ] Confirmation dialog focus, cancel, and destructive-action behavior.
+- [ ] No import file contents, address, source ID, note, or score leaves the
+      browser during network capture.
+- [ ] Web Locks unavailable mode allows preview/export and blocks mutation.
 
-- [ ] Working tree contains only intended release changes.
-- [ ] Exact source commit is pushed before the Sites version is saved.
-- [ ] Saved version uses that exact commit SHA.
-- [ ] Deployment uses the saved version.
-- [ ] `/`, every primary workspace, and `/healthz` load on production.
-- [ ] Production version, commit, URL, time, and rollback version are recorded.
-- [ ] No DNS change is made without explicit authorization.
+## Dependency and runtime gate
+
+- [ ] Production dependency audit reviewed with no unresolved critical
+      production vulnerability.
+- [ ] Full dependency graph updated/reviewed for the development-only
+      `brace-expansion <=5.0.7` advisory; patched dependency or documented
+      release disposition: ____________________
+- [ ] Runtime starts from the exact production output.
+- [ ] Production `/`, `/dashboard`, `/pipeline`, `/compliance`, and `/healthz`
+      return successfully.
+- [ ] Production logs contain no unexpected errors or personal data.
+
+## Compliance and documentation gate
+
+- [ ] July 28, 2026 official legal baseline links are present and the checklist
+      is framed as an attorney-review aid, not legal advice.
+- [ ] January 1, 2027 Rhode Island transition warning remains explicit.
+- [ ] No score authorizes contact or a transaction action.
+- [ ] Outreach and provider mutations remain disabled.
+- [ ] README, deployment, operator, data import, scoring/underwriting,
+      compliance, backup/recovery, and known-limitations documents match code.
+- [ ] Deferred authentication, underwriting, buyer verification, Approval
+      Queue, audit history, closing, and integrations are not called complete.
+
+## Exact private deployment
+
+- [ ] Working tree is clean after the verified commit.
+- [ ] Exact commit is pushed to the private GitHub branch.
+- [ ] Existing Sites project ID from `.openai/hosting.json` is reused.
+- [ ] Source state pushed before the version is saved.
+- [ ] Saved version records the exact pushed commit.
+- [ ] Deployment uses that saved version.
+- [ ] Existing private access policy is unchanged.
+- [ ] Production health, headers, routes, and logs are checked.
+- [ ] Rollback target is recorded and verified.
+- [ ] No DNS or public-access change occurred.

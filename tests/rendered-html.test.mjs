@@ -58,7 +58,7 @@ test("public responses carry baseline browser security headers", async () => {
 });
 
 const routes = [
-  ["/dashboard", /DealFlow dashboard/i, /No property records yet/i],
+  ["/dashboard", /Current operating snapshot/i, /Inspecting browser workspace/i],
   ["/deal-lab", /Deal Lab/i, /ARV - Repairs - Holding\/Closing Costs - Buyer Profit - Wholesale Fee/i],
   ["/pipeline", /Pipeline/i, /Your pipeline is empty/i],
   ["/buyers", /Buyer workspace/i, /No buyer profiles yet/i],
@@ -101,6 +101,40 @@ test("pages with multiple guarded actions do not reuse accessible IDs", async ()
   const duplicates = ids.filter((id, index) => ids.indexOf(id) !== index);
 
   assert.deepEqual([...new Set(duplicates)], []);
+});
+
+test("pipeline renders the local lead engine and hard action boundaries", async () => {
+  const response = await render("/pipeline");
+  const html = await response.text();
+
+  assert.match(html, /Authorized CSV intake/i);
+  assert.match(html, /Configure launch buy box/i);
+  assert.match(html, /The selected file stays in this browser/i);
+  assert.match(html, /Apply safe records/i);
+  assert.match(html, /A score never authorizes contact/i);
+  assert.match(html, /No real property records yet/i);
+  assert.doesNotMatch(
+    html,
+    /Send campaign|Text owner|Email owner|Autodial|Upload property CSV/i,
+  );
+});
+
+test("dashboard withholds factual output until browser storage is hydrated", async () => {
+  const response = await render("/dashboard");
+  const html = await response.text();
+
+  assert.match(html, /Current operating snapshot/i);
+  assert.match(html, /Inspecting browser workspace/i);
+  assert.match(html, /System and local storage/i);
+  assert.match(html, /Not enough data/i);
+  assert.doesNotMatch(
+    html,
+    /Active buy box|Qualification by launch status|No authorized property records are available to rank|Serialized writes available|0 imported of 0/i,
+  );
+  assert.doesNotMatch(
+    html,
+    /Projected revenue|Seller motivation|Recent seller activity|Approval rate|Last configuration change/i,
+  );
 });
 
 test("health endpoint reports the honest local-first release state", async () => {

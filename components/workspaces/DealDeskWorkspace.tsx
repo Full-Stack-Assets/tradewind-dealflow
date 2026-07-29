@@ -20,7 +20,7 @@ const qualificationChecks = [
 ] as const;
 
 export function DealDeskWorkspace() {
-  const { data, updateData } = useLocalData();
+  const { data, updateData, writesSupported } = useLocalData();
   const draft = data.dealDeskDraft;
   const selectedDeal = data.deals.find((deal) => deal.id === draft.dealId);
   const checkCount = qualificationChecks.filter(
@@ -36,7 +36,7 @@ export function DealDeskWorkspace() {
     draft.consentToReview;
 
   const patchDraft = (patch: Partial<typeof draft>) => {
-    updateData((current) => ({
+    void updateData((current) => ({
       ...current,
       dealDeskDraft: { ...current.dealDeskDraft, ...patch },
     }));
@@ -122,7 +122,7 @@ export function DealDeskWorkspace() {
             </div>
             <label>
               <span>Property record *</span>
-              <select required value={draft.dealId} onChange={(event) => patchDraft({ dealId: event.target.value })}>
+              <select required disabled={!writesSupported} value={draft.dealId} onChange={(event) => patchDraft({ dealId: event.target.value })}>
                 <option value="">Select a property</option>
                 {data.deals.map((deal) => <option key={deal.id} value={deal.id}>{deal.address}, {deal.city} · {deal.state}</option>)}
               </select>
@@ -130,16 +130,16 @@ export function DealDeskWorkspace() {
             <div className="form-grid two">
               <label>
                 <span>Submitter name *</span>
-                <input required autoComplete="name" value={draft.submitterName} onChange={(event) => patchDraft({ submitterName: event.target.value })} />
+                <input required disabled={!writesSupported} autoComplete="name" value={draft.submitterName} onChange={(event) => patchDraft({ submitterName: event.target.value })} />
               </label>
               <label>
                 <span>Submitter email *</span>
-                <input required type="email" autoComplete="email" value={draft.submitterEmail} onChange={(event) => patchDraft({ submitterEmail: event.target.value })} />
+                <input required disabled={!writesSupported} type="email" autoComplete="email" value={draft.submitterEmail} onChange={(event) => patchDraft({ submitterEmail: event.target.value })} />
               </label>
             </div>
             <label>
               <span>Structure requested for review *</span>
-              <select required value={draft.requestedStructure} onChange={(event) => patchDraft({ requestedStructure: event.target.value })}>
+              <select required disabled={!writesSupported} value={draft.requestedStructure} onChange={(event) => patchDraft({ requestedStructure: event.target.value })}>
                 <option value="">Select a review question</option>
                 <option>Direct acquisition</option>
                 <option>Assignment</option>
@@ -156,6 +156,7 @@ export function DealDeskWorkspace() {
               <span>Evidence summary, seller priorities, and open questions *</span>
               <textarea
                 required
+                disabled={!writesSupported}
                 rows={9}
                 value={draft.summary}
                 onChange={(event) => patchDraft({ summary: event.target.value })}
@@ -186,6 +187,7 @@ export function DealDeskWorkspace() {
                 <label className="check-row" key={item}>
                   <input
                     type="checkbox"
+                    disabled={!writesSupported}
                     checked={Boolean(draft.qualificationChecks[item])}
                     onChange={(event) =>
                       patchDraft({
@@ -203,6 +205,7 @@ export function DealDeskWorkspace() {
             <label className="consent-card">
               <input
                 type="checkbox"
+                disabled={!writesSupported}
                 checked={draft.consentToReview}
                 onChange={(event) => patchDraft({ consentToReview: event.target.checked })}
               />

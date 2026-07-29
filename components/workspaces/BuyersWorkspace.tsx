@@ -63,7 +63,7 @@ const strategies: DealStrategy[] = [
 ];
 
 export function BuyersWorkspace() {
-  const { data, updateData } = useLocalData();
+  const { data, updateData, writesSupported } = useLocalData();
   const [form, setForm] = useState<BuyerForm>(blankBuyer);
   const [showForm, setShowForm] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState("");
@@ -94,7 +94,7 @@ export function BuyersWorkspace() {
     });
   };
 
-  const addBuyer = (event: React.FormEvent) => {
+  const addBuyer = async (event: React.FormEvent) => {
     event.preventDefault();
     const minPrice = form.minPrice === "" ? null : Number(form.minPrice);
     const maxPrice = form.maxPrice === "" ? null : Number(form.maxPrice);
@@ -135,10 +135,14 @@ export function BuyersWorkspace() {
       proofOfFundsExpiresAt: form.proofOfFundsExpiresAt,
       lastVerifiedAt: form.lastVerifiedAt,
     };
-    updateData((current) => ({
+    const result = await updateData((current) => ({
       ...current,
       buyers: [buyer, ...current.buyers],
     }));
+    if (!result.ok) {
+      setMessage(result.message);
+      return;
+    }
     setForm(blankBuyer);
     setShowForm(false);
     setMessage("Buyer profile added locally. No buyer was contacted.");
@@ -154,6 +158,7 @@ export function BuyersWorkspace() {
           <button
             className="button button-primary"
             type="button"
+            disabled={!writesSupported}
             aria-expanded={showForm}
             onClick={() => setShowForm((current) => !current)}
           >
@@ -269,7 +274,7 @@ export function BuyersWorkspace() {
             </div>
           </fieldset>
           <div className="button-row">
-            <button className="button button-primary" type="submit">Save buyer locally</button>
+            <button className="button button-primary" type="submit" disabled={!writesSupported}>Save buyer locally</button>
             <button className="button button-quiet" type="button" onClick={() => setShowForm(false)}>Cancel</button>
           </div>
         </form>
@@ -355,7 +360,7 @@ export function BuyersWorkspace() {
             <article className="buyer-card" key={buyer.id}>
               <div className="buyer-card-top">
                 <span className="buyer-initial" aria-hidden="true">{buyer.name.slice(0, 1).toUpperCase()}</span>
-                <button className="icon-button" type="button" onClick={() => setDeleteId(buyer.id)} aria-label={`Delete ${buyer.name}`}>×</button>
+                <button className="icon-button" type="button" disabled={!writesSupported} onClick={() => setDeleteId(buyer.id)} aria-label={`Delete ${buyer.name}`}>×</button>
               </div>
               <h2>{buyer.name}</h2>
               <p>{buyer.company || "No company recorded"}</p>
@@ -374,8 +379,15 @@ export function BuyersWorkspace() {
         title="Delete this buyer profile?"
         description="This removes the buyer and recorded criteria from this browser. Export a backup if the relationship record must be retained."
         onCancel={() => setDeleteId(null)}
-        onConfirm={() => {
-          updateData((current) => ({ ...current, buyers: current.buyers.filter((buyer) => buyer.id !== deleteId) }));
+        onConfirm={async () => {
+          const result = await updateData((current) => ({
+            ...current,
+            buyers: current.buyers.filter((buyer) => buyer.id !== deleteId),
+          }));
+          if (!result.ok) {
+            setMessage(result.message);
+            return;
+          }
           setDeleteId(null);
           setMessage("Buyer profile deleted from this browser.");
         }}

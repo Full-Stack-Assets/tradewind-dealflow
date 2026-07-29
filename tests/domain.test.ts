@@ -64,13 +64,25 @@ test("percentage comparison identifies itself as a heuristic", () => {
 test("new local data is configuration-only and contains no production records", () => {
   const empty = createEmptyData("2026-07-27T12:00:00.000Z");
 
-  assert.equal(empty.schemaVersion, 1);
+  assert.equal(empty.schemaVersion, 2);
+  assert.equal(empty.revision, 0);
   assert.equal(empty.updatedAt, "2026-07-27T12:00:00.000Z");
   assert.deepEqual(empty.deals, []);
   assert.deepEqual(empty.buyers, []);
   assert.deepEqual(empty.analyses, []);
   assert.equal(empty.preferences.selectedState, null);
   assert.equal(empty.preferences.participationPath, null);
+  assert.equal(empty.buyBox.configured, true);
+  assert.equal(empty.buyBox.version, 1);
+  assert.deepEqual(empty.buyBox.states, ["MA", "RI"]);
+  assert.deepEqual(empty.buyBox.weights, {
+    propertyFit: 25,
+    financialFeasibility: 25,
+    marketability: 15,
+    buyerDemand: 15,
+    dataQuality: 10,
+    sellerProvidedFit: 10,
+  });
 });
 
 test("malformed or incompatible imports are rejected without a replacement value", () => {
@@ -82,7 +94,7 @@ test("malformed or incompatible imports are rejected without a replacement value
   assert.deepEqual(result, {
     ok: false,
     errors: [
-      "This file uses schema version 99; Tradewind DealFlow supports version 1.",
+      "This file uses schema version 99; Tradewind DealFlow supports versions 1 and 2.",
       "The import is missing required top-level fields.",
     ],
   });
@@ -112,10 +124,7 @@ test("imports reject malformed nested records before any browser data can be rep
   assert.deepEqual(result, {
     ok: false,
     errors: [
-      "Workspace preferences are malformed.",
-      "One or more deal analyses are malformed.",
-      "Curriculum progress is malformed.",
-      "Compliance records are malformed.",
+      "The import contains malformed version-2 workspace data.",
     ],
   });
   assert.equal("data" in result, false);
@@ -130,7 +139,9 @@ test("valid imports normalize whitespace and preserve only typed records", () =>
     state: "MA",
     address: "  10 Harbor Way  ",
     city: "  Boston ",
+    zip: "02110",
     propertyType: "Single-family",
+    market: "Boston",
     source: "  Municipal assessor  ",
     ownerContactStatus: "Not researched",
     stage: "Research",
@@ -138,6 +149,9 @@ test("valid imports normalize whitespace and preserve only typed records", () =>
     notes: "",
     askingPrice: 250000,
     rehabLevel: "Moderate",
+    sourceAssertions: [],
+    factConflicts: [],
+    researchRestrictions: [],
     strategies: ["Assignment"],
     executedAgreement: false,
     equitableInterestRecorded: false,
@@ -225,7 +239,9 @@ const deal: DealRecord = {
   state: "MA",
   address: "10 Harbor Way",
   city: "Boston",
+  zip: "02110",
   propertyType: "Single-family",
+  market: "Boston",
   source: "Municipal assessor",
   ownerContactStatus: "Not researched",
   stage: "Qualified",
@@ -233,6 +249,9 @@ const deal: DealRecord = {
   notes: "",
   askingPrice: 250_000,
   rehabLevel: "Moderate",
+  sourceAssertions: [],
+  factConflicts: [],
+  researchRestrictions: [],
   strategies: ["Assignment", "Rehab/resale"],
   executedAgreement: false,
   equitableInterestRecorded: false,
@@ -290,4 +309,15 @@ test("buyer matching surfaces criteria conflicts instead of hiding them", () => 
     "$425,000 is outside the recorded $100,000–$300,000 range.",
     "Heavy rehab exceeds the recorded tolerance.",
   ]);
+});
+
+test("buyer matching calls out an unrecorded rehab level", () => {
+  const result = matchBuyer({ ...deal, rehabLevel: null }, buyer, "2026-07-27");
+
+  assert.equal(result.score, 85);
+  assert.ok(
+    result.conflicts.includes(
+      "Rehab level is not recorded, so tolerance cannot be evaluated.",
+    ),
+  );
 });

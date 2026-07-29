@@ -1,20 +1,42 @@
-# Deployment, Domain, Backup, and Rollback
+# Setup and Deployment
 
-Production target: OpenAI Sites  
-Application mode: static-capable React/RSC worker with local browser persistence
+Release mode: local-first lead engine
 
-## 1. Release verification
+Hosting target: the existing private OpenAI Sites project
 
-From a clean checkout with Node.js 22.13 or newer:
+Data backend: none
+
+## Local setup
+
+Use Node.js 22.13 or newer:
 
 ```bash
 npm ci
-npm test
-npm run typecheck
-npm run lint
+npm run dev
 ```
 
-The build must contain `/healthz`, and that endpoint must return:
+No provider credential is required. Do not add secrets, private email
+addresses, seller records, buyer records, or production exports to source
+control.
+
+## Release verification
+
+From the exact candidate source:
+
+```bash
+npm run test:unit
+npm run typecheck
+npm run lint
+npm run build
+npm run test:render
+git diff --check
+```
+
+Task 8 also performs live desktop/mobile, keyboard, storage-recovery, security
+header, dependency, runtime, and production-health checks. A successful build
+alone is not a production release.
+
+`GET /healthz` must return:
 
 ```json
 {
@@ -25,143 +47,61 @@ The build must contain `/healthz`, and that endpoint must return:
 }
 ```
 
-No production release should contain user records or generated seed records.
+The endpoint proves that the deployed worker responds with the declared mode.
+It does not inspect a user’s browser storage.
 
-## 2. Sites release discipline
+## Exact-commit Sites promotion
 
-1. Review `.openai/hosting.json`; reuse its exact Sites project ID once present.
-2. Commit every source and asset change.
-3. Push that exact commit through the hosting provider’s source credential.
-4. Build the Sites source archive from the committed state, not from a dirty
-   working tree.
+`.openai/hosting.json` identifies the existing Sites project. Reuse that
+opaque project ID; do not create a second site.
+
+1. Confirm the working tree contains only reviewed release changes.
+2. Commit the verified source.
+3. Push that exact commit to the source remote.
+4. Build the deployment source from that pushed state.
 5. Save a Sites version using the exact pushed commit SHA.
 6. Deploy only that saved version.
-7. Verify status, `/`, every workspace route, and `/healthz` at the production
-   URL.
-8. Record the version ID, commit SHA, deployment URL, verification time, and
-   operator.
+7. Preserve the existing private access policy.
+8. Verify `/`, `/dashboard`, `/pipeline`, `/compliance`, and `/healthz`.
+9. Review production response headers and runtime logs.
+10. Record the commit SHA, saved-version ID, deployment URL, verification time,
+    and rollback version in the release evidence ledger.
 
-Never call the create-site operation a second time for the same application.
-Treat all Sites IDs and cursors as opaque values.
+Do not claim the current branch is deployed until those steps are complete.
 
-## 3. Environment and secrets
+## Domain and DNS boundary
 
-Phase 1 requires no environment secret. `.env.example` lists future
-configuration names but leaves all provider decisions unset. Do not add API
-keys to client code, `.env.example`, git history, build logs, or screenshots.
+No DNS change is authorized by a code deployment.
 
-The project has no D1 or R2 binding in Phase 1. Authentication, PostgreSQL,
-queues, and encrypted object storage are Phase 2 work.
+1. Obtain the exact domain-verification and routing records from Sites.
+2. Obtain explicit domain-owner approval.
+3. Add only the exact `A`, `AAAA`, or `CNAME` record Sites supplies.
+4. Do not guess an address or derive a DNS target from a deployment URL.
+5. Resolve existing conflicting records before changing them.
+6. Wait for managed TLS, then verify the hostname, certificate, canonical
+   routes, mobile load, and `/healthz`.
+7. Keep the prior verified deployment available until cutover is confirmed.
 
-An optional multi-stage `Dockerfile` builds the same production worker and
-serves it as a non-root user on port 3000 with a `/healthz` container check.
-Sites does not use this container path. Build it where Docker is available:
+Public-access changes are also approval-gated. The release remains private
+unless the owner explicitly authorizes an access-policy change.
 
-```bash
-docker build -t tradewind-dealflow:local-first .
-docker run --read-only --tmpfs /tmp -p 3000:3000 tradewind-dealflow:local-first
-```
+## Secrets and external services
 
-## 4. Staging and production
+This milestone has no application secret and no provider mutation. Future
+authentication, PostgreSQL, object storage, monitoring, property data, email,
+SMS, or voice services must use the deployment secret manager. Never place a
+credential in frontend code, git history, documentation, logs, health
+responses, screenshots, or project chat.
 
-Use separate Sites projects or isolated saved versions/access policies for
-staging and production. Never import production seller or buyer data into a
-test environment. Automated tests use clearly synthetic fixtures only inside
-the test process.
-
-Minimum promotion record:
-
-- source commit SHA;
-- build and test results;
-- legal baseline date;
-- reviewer for compliance-copy changes;
-- saved Sites version ID;
-- deployment URL;
-- rollback version ID.
-
-## 5. Existing-domain connection
-
-Do not change DNS without explicit domain-owner authorization.
-
-1. Obtain the exact custom-domain target and verification record from Sites.
-2. In the authoritative DNS provider, choose only the record type Sites
-   specifies:
-   - `A` for an IPv4 address;
-   - `AAAA` for an IPv6 address;
-   - `CNAME` for a provider hostname, commonly a subdomain such as `app`.
-3. Enter the exact host/name and value. Do not guess an IP or derive a target
-   from the deployment URL.
-4. Remove a conflicting record only after resolving its purpose and receiving
-   approval.
-5. Keep DNS TTL conservative during cutover, then restore the organization’s
-   normal TTL after validation.
-6. Complete Sites ownership verification and wait for managed TLS issuance.
-7. Verify HTTPS, certificate hostname, canonical route behavior, mobile load,
-   and `/healthz`.
-8. Keep the previous deployment/domain route available until verification is
-   complete.
-
-The public marketing home can use the apex domain or `www`; the app can use a
-subdomain such as `app` only after the owner chooses that structure.
-
-## 6. Email-domain authentication
-
-Phase 1 sends no email, so it does not require or justify a sender-domain DNS
-change. Before a later email provider is activated:
-
-- publish only the provider-supplied SPF include/record;
-- enable DKIM using the exact selector and public key supplied by the provider;
-- begin DMARC with a monitored policy approved by the domain owner and counsel,
-  then tighten based on verified reports;
-- keep transactional and marketing streams separated where practical;
-- verify alignment, bounce/complaint handling, unsubscribe, and suppression;
-- never publish guessed DNS records.
-
-## 7. Monitoring and health
-
-Monitor:
-
-- HTTPS availability and latency for `/healthz`;
-- home and one workspace route;
-- certificate expiration/renewal state;
-- deployment failures;
-- client-side error rate only through a future privacy-reviewed provider that
-  redacts property addresses, seller/buyer data, and free-form notes.
-
-The health response proves that the release worker is responding and that the
-declared release mode has not changed. It does not prove browser storage,
-external government links, or a user’s local data are healthy.
-
-## 8. Rollback
+## Rollback
 
 1. Stop further promotion.
-2. Identify the last verified Sites version and its commit SHA.
-3. Deploy that already saved version using the Sites rollback/version controls.
-4. Verify `/healthz`, the home page, and critical workspaces.
-5. Record the incident, failed version, restored version, times, and operator.
-6. Fix forward in a new commit and saved version.
+2. Select the last verified saved Sites version.
+3. Deploy that saved version without rewriting git history.
+4. Verify the primary routes, `/healthz`, headers, and logs.
+5. Record the failed and restored versions and the operator’s time of action.
+6. Fix forward in a new reviewed commit.
 
-Do not rewrite git history or overwrite the broken release record. Browser data
-uses a versioned schema; any future schema migration must include a tested
-backward/rollback plan before deployment.
-
-## 9. User-data backup and recovery
-
-Application source backup and user workspace backup are separate:
-
-- Source is recovered from the exact git commit and Sites version.
-- User records are recovered only from that user’s exported JSON backup.
-
-Recovery procedure:
-
-1. Open a verified production deployment.
-2. Export the current workspace if it contains any records worth preserving.
-3. Choose **Import JSON** and select the intended backup.
-4. Confirm the file passes schema validation.
-5. Confirm replacement.
-6. Review state selection, record totals, at least one property, one buyer if
-   present, and compliance progress.
-7. Export a new recovery-point JSON file.
-
-Test restoration periodically with non-production test fixtures in an isolated
-browser profile. Never use a real seller or buyer record in a public test.
+Application rollback and user-data recovery are different operations. Sites
+can restore application code; it cannot restore browser records. Follow
+[Backup and recovery](BACKUP_AND_RECOVERY.md) for workspace data.
