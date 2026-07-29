@@ -61,6 +61,7 @@ const routes = [
   ["/dashboard", /Current operating snapshot/i, /Inspecting browser workspace/i],
   ["/deal-lab", /Deal Lab/i, /ARV - Repairs - Holding\/Closing Costs - Buyer Profit - Wholesale Fee/i],
   ["/pipeline", /Pipeline/i, /Your pipeline is empty/i],
+  ["/sources", /MassGIS standing policy/i, /Import all safe records/i],
   ["/buyers", /Buyer workspace/i, /No buyer profiles yet/i],
   ["/academy", /Academy/i, /12 learning modules/i],
   ["/compliance", /Compliance workspace/i, /January 1, 2027/i],
@@ -117,6 +118,19 @@ test("pipeline renders the local lead engine and hard action boundaries", async 
     html,
     /Send campaign|Text owner|Email owner|Autodial|Upload property CSV/i,
   );
+});
+
+test("sources renders bounded approval, scheduling, intake, and audit without outreach", async () => {
+  const response = await render("/sources");
+  const html = await response.text();
+
+  assert.match(html, /MassGIS Property Tax Parcels/i);
+  assert.match(html, /Run now/i);
+  assert.match(html, /Latest source run counts/i);
+  assert.match(html, /Grouped, not per-record approval/i);
+  assert.match(html, /Import all safe records/i);
+  assert.match(html, /Download audit/i);
+  assert.doesNotMatch(html, /Send campaign|Text owner|Email owner|Autodial|OWNER1|OWN_ADDR/i);
 });
 
 test("dashboard withholds factual output until browser storage is hydrated", async () => {

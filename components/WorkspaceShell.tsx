@@ -11,6 +11,7 @@ const navigation = [
   { href: "/dashboard", label: "Dashboard", glyph: "⌂" },
   { href: "/deal-lab", label: "Deal Lab", glyph: "◇" },
   { href: "/pipeline", label: "Pipeline", glyph: "↗" },
+  { href: "/sources", label: "Sources", glyph: "◫" },
   { href: "/buyers", label: "Buyers", glyph: "◎" },
   { href: "/academy", label: "Academy", glyph: "▤" },
   { href: "/compliance", label: "Compliance", glyph: "✓" },
@@ -50,8 +51,8 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           <div className="sidebar-foot">
             <span className="status-dot" aria-hidden="true" />
             <div>
-              <strong>Local-first mode</strong>
-              <small>No live outreach or backend sync</small>
+              <strong>Controlled intake mode</strong>
+              <small>D1 staging · local pipeline · outreach disabled</small>
             </div>
           </div>
         </aside>
@@ -78,7 +79,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
             {children}
           </main>
           <footer className="workspace-footer">
-            <span>Tradewind DealFlow · Local-first release</span>
+            <span>Tradewind DealFlow · MassGIS ingestion release</span>
             <span>
               Educational and operational software—not legal, tax, financial,
               brokerage, appraisal, or investment advice.

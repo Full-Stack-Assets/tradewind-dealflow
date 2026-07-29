@@ -17,6 +17,7 @@ import {
   StatusPill,
   WorkspaceHeader,
 } from "@/components/WorkspaceShell";
+import { SourceHealthStrip } from "@/components/workspaces/SourceHealthStrip";
 import { downloadText } from "@/lib/download";
 import {
   serializeData,
@@ -102,6 +103,7 @@ export function PipelineWorkspace() {
         description="Import authorized records, apply one narrow buy box, and move only evidence-backed research forward."
       />
       <LocalDataNotice />
+      <SourceHealthStrip surface="pipeline" />
 
       <section className="toolbar panel" aria-label="Pipeline tools">
         <div className="toolbar-copy">
