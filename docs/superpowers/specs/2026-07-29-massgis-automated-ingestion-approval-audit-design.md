@@ -25,12 +25,26 @@ This increment does not add outreach, seller-contact enrichment, owner-name or
 owner-mailing-address collection, automated offers, contracts, public
 marketing, or AI decision-making.
 
+## Approved first-build reduction
+
+After reviewing the complete design, the operator requested a leaner first
+implementation. The first build keeps scheduled and operator-triggered
+retrieval, standing policy approval, D1 staging, grouped exception counts, and
+append-only audit evidence. It uses one `Import all safe records` action when
+the operator opens the app.
+
+The first build defers automatic background-to-local delivery, delivery-receipt
+tables, the generic approval-request subsystem, and the full audit explorer.
+Those additions are unnecessary to remove the immediate 100-plus-record
+ingestion bottleneck. Exact reimport handling makes a lost post-import
+acknowledgement safe to retry.
+
 ## Confirmed product decisions
 
 1. The normal batch size is hundreds of property records, not a handful.
 2. Both scheduled and operator-triggered retrieval are required.
 3. One standing source-policy approval replaces per-record approval.
-4. Safe records auto-apply when the local workspace is available.
+4. Safe records import in one batch action; there is no per-record approval.
 5. Exceptions are reviewed in batches, grouped by reason.
 6. Source, run, decision, transformation, and application events are audited.
 7. MassGIS property facts may identify research candidates, but they are not
