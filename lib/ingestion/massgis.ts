@@ -36,6 +36,16 @@ export type MassGisCandidate = {
   normalizedFingerprint: string;
 };
 
+export type MassGisRecordRejection = {
+  sourceRecordId: string | null;
+  reason: "owner-contact-field" | "unapproved-field" | "malformed-record" | "invalid-number" | "impossible-date";
+};
+
+export type MassGisFetchResult = {
+  records: MassGisCandidate[];
+  rejections: MassGisRecordRejection[];
+};
+
 export type FetchMassGisRecordsOptions = {
   fetch?: typeof globalThis.fetch;
   retrievedAt?: string;
@@ -44,6 +54,15 @@ export type FetchMassGisRecordsOptions = {
 };
 
 class TransientMassGisError extends Error {}
+
+class MassGisRecordValidationError extends Error {
+  readonly reason: MassGisRecordRejection["reason"];
+
+  constructor(reason: MassGisRecordRejection["reason"], message: string) {
+    super(message);
+    this.reason = reason;
+  }
+}
 
 function quotedStrings(values: string[]): string {
   return values.map((value) => `'${value.replaceAll("'", "''")}'`).join(", ");
@@ -106,33 +125,36 @@ function isPossibleDate(value: unknown): boolean {
 
 function validateFeature(feature: unknown, approvedFields: readonly string[], requireApprovedFields: boolean): MassGisFeature {
   if (!isRecord(feature) || !isRecord(feature.attributes) || "geometry" in feature) {
-    throw new Error("malformed MassGIS feature");
+    throw new MassGisRecordValidationError("malformed-record", "malformed MassGIS feature");
   }
   const attributes = feature.attributes;
   for (const [field, value] of Object.entries(attributes)) {
-    if (OWNER_FIELDS.has(field) || !MASSGIS_FIELDS.includes(field as MassGisField) || !approvedFields.includes(field)) {
-      throw new Error(`unapproved field: ${field}`);
+    if (OWNER_FIELDS.has(field)) {
+      throw new MassGisRecordValidationError("owner-contact-field", "unapproved field");
+    }
+    if (!MASSGIS_FIELDS.includes(field as MassGisField) || !approvedFields.includes(field)) {
+      throw new MassGisRecordValidationError("unapproved-field", "unapproved field");
     }
     if (NUMBER_FIELDS.has(field as MassGisField) && value !== null && (typeof value !== "number" || !Number.isFinite(value))) {
-      throw new Error(`nonfinite number or invalid numeric field: ${field}`);
+      throw new MassGisRecordValidationError("invalid-number", "nonfinite number or invalid numeric field");
     }
     if (TEXT_FIELDS.has(field as MassGisField) && value !== null && typeof value !== "string") {
-      throw new Error(`invalid text field: ${field}`);
+      throw new MassGisRecordValidationError("malformed-record", "invalid text field");
     }
-    if (field === "LS_DATE" && !isPossibleDate(value)) throw new Error("impossible date: LS_DATE");
+    if (field === "LS_DATE" && !isPossibleDate(value)) throw new MassGisRecordValidationError("impossible-date", "impossible date");
   }
   if (!("OBJECTID" in attributes) || typeof attributes.OBJECTID !== "number" || !Number.isInteger(attributes.OBJECTID) || attributes.OBJECTID < 0) {
-    throw new Error("malformed MassGIS feature: OBJECTID is required");
+    throw new MassGisRecordValidationError("malformed-record", "malformed MassGIS feature: OBJECTID is required");
   }
   if (requireApprovedFields) {
     for (const field of approvedFields) {
-      if (!(field in attributes)) throw new Error(`malformed MassGIS feature: missing ${field}`);
+      if (!(field in attributes)) throw new MassGisRecordValidationError("malformed-record", "malformed MassGIS feature: missing approved field");
     }
   }
   return { attributes };
 }
 
-export function validateMassGisPage(page: unknown, policy: SourcePolicy): MassGisFeature[] {
+function validateMassGisPageEnvelope(page: unknown, policy: SourcePolicy): unknown[] {
   const validated = validatePolicy(policy);
   if (!validated.ok) throw new Error(validated.error);
   if (!isRecord(page)) throw new Error("malformed MassGIS page");
@@ -140,7 +162,23 @@ export function validateMassGisPage(page: unknown, policy: SourcePolicy): MassGi
   if (!Array.isArray(page.features) || page.features.length > validated.value.pageSize) {
     throw new Error("malformed MassGIS page features");
   }
-  return page.features.map((feature) => validateFeature(feature, validated.value.outFields, true));
+  for (const feature of page.features) {
+    if (!isRecord(feature) || !isRecord(feature.attributes)) continue;
+    if ("geometry" in feature) throw new Error("unexpected geometry in MassGIS response");
+    for (const field of Object.keys(feature.attributes)) {
+      if (!OWNER_FIELDS.has(field) && !MASSGIS_FIELDS.includes(field as MassGisField)) {
+        throw new Error("unknown field in MassGIS response schema");
+      }
+    }
+  }
+  return page.features;
+}
+
+export function validateMassGisPage(page: unknown, policy: SourcePolicy): MassGisFeature[] {
+  const validated = validatePolicy(policy);
+  if (!validated.ok) throw new Error(validated.error);
+  return validateMassGisPageEnvelope(page, validated.value)
+    .map((feature) => validateFeature(feature, validated.value.outFields, true));
 }
 
 function nullableNumber(value: unknown): number | null {
@@ -270,7 +308,20 @@ async function requestPage(url: URL, fetcher: typeof globalThis.fetch, timeoutMs
   throw new Error(`MassGIS transient request failed after ${MAX_RETRIES} retries: ${lastError instanceof Error ? lastError.message : "unknown error"}`);
 }
 
-export async function fetchMassGisRecords(policy: SourcePolicy, options: FetchMassGisRecordsOptions = {}): Promise<MassGisCandidate[]> {
+function sourceRecordId(feature: unknown): string | null {
+  if (!isRecord(feature) || !isRecord(feature.attributes)) return null;
+  const objectId = feature.attributes.OBJECTID;
+  return typeof objectId === "number" && Number.isInteger(objectId) && objectId >= 0 ? String(objectId) : null;
+}
+
+function recordRejection(feature: unknown, error: unknown): MassGisRecordRejection {
+  return {
+    sourceRecordId: sourceRecordId(feature),
+    reason: error instanceof MassGisRecordValidationError ? error.reason : "malformed-record",
+  };
+}
+
+export async function fetchMassGisRecords(policy: SourcePolicy, options: FetchMassGisRecordsOptions = {}): Promise<MassGisFetchResult> {
   const validated = validatePolicy(policy);
   if (!validated.ok) throw new Error(validated.error);
   const approved = validated.value;
@@ -283,6 +334,7 @@ export async function fetchMassGisRecords(policy: SourcePolicy, options: FetchMa
   if (!Number.isFinite(now.getTime())) throw new Error("retrievedAt must be an ISO timestamp");
 
   const records: MassGisCandidate[] = [];
+  const rejections: MassGisRecordRejection[] = [];
   const identities = new Set<string>();
   let offset = 0;
   let previousObjectId = -1;
@@ -292,13 +344,26 @@ export async function fetchMassGisRecords(policy: SourcePolicy, options: FetchMa
     const params = buildQuery({ ...approved, pageSize: count }, offset, now);
     const url = new URL(approved.endpoint);
     url.search = params.toString();
-    const features = validateMassGisPage(await requestPage(url, fetcher, timeoutMs), { ...approved, pageSize: count });
+    const features = validateMassGisPageEnvelope(await requestPage(url, fetcher, timeoutMs), { ...approved, pageSize: count });
     if (features.length > count) throw new Error("MassGIS page exceeded requested count");
-    for (const current of features) {
+    for (const feature of features) {
+      let current: MassGisFeature;
+      try {
+        current = validateFeature(feature, approved.outFields, true);
+      } catch (error) {
+        rejections.push(recordRejection(feature, error));
+        continue;
+      }
       const objectId = current.attributes.OBJECTID as number;
       if (objectId < previousObjectId) throw new Error("decreasing object ID in MassGIS pagination");
       previousObjectId = objectId;
-      const candidate = normalizeMassGisRecord(current, retrievedAt);
+      let candidate: MassGisCandidate;
+      try {
+        candidate = normalizeMassGisRecord(current, retrievedAt);
+      } catch (error) {
+        rejections.push(recordRejection(current, error));
+        continue;
+      }
       if (identities.has(candidate.sourceIdentity)) throw new Error("duplicate source identity in MassGIS pagination");
       identities.add(candidate.sourceIdentity);
       records.push(candidate);
@@ -306,5 +371,5 @@ export async function fetchMassGisRecords(policy: SourcePolicy, options: FetchMa
     if (features.length < count) break;
     offset += features.length;
   }
-  return records;
+  return { records, rejections };
 }

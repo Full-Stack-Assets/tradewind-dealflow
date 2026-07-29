@@ -97,6 +97,10 @@ test("page validation rejects malformed data before normalization", () => {
     () => validateMassGisPage({ features: [feature({ TOTAL_VAL: Number.POSITIVE_INFINITY })] }, validPolicy()),
     /nonfinite number/i,
   );
+  assert.throws(
+    () => validateMassGisPage({ features: [feature({ UNKNOWN_FIELD: "schema drift" })] }, validPolicy()),
+    /unknown field.*schema/i,
+  );
 });
 
 test("official residential codes map without inventing motivation", () => {
@@ -111,31 +115,41 @@ test("official residential codes map without inventing motivation", () => {
   assert.equal("sellerMotivation" in candidate, false);
 });
 
-test("fetches deterministic pages and discards raw owner data", async () => {
+test("fetches safe siblings while excluding malformed and owner-field records with reasons", async () => {
   const calls: URL[] = [];
-  const records = await fetchMassGisRecords(validPolicy({ pageSize: 2, maxRecordsPerRun: 100 }), {
+  const result = await fetchMassGisRecords(validPolicy({ pageSize: 4, maxRecordsPerRun: 100 }), {
     retrievedAt: "2026-07-29T00:00:00.000Z",
     fetch: async (input) => {
       const url = new URL(input.toString());
       calls.push(url);
       const offset = Number(url.searchParams.get("resultOffset"));
       const features = offset === 0
-        ? [feature({ OBJECTID: 1, GlobalID: "one" }), feature({ OBJECTID: 2, GlobalID: "two" })]
-        : [feature({ OBJECTID: 3, GlobalID: "three" })];
+        ? [
+          feature({ OBJECTID: 1, GlobalID: "one" }),
+          feature({ OBJECTID: 2, GlobalID: "two", OWNER1: "must-not-retain" }),
+          feature({ OBJECTID: 3, GlobalID: "three", CITY: undefined }),
+          feature({ OBJECTID: 4, GlobalID: "four" }),
+        ]
+        : [];
       return new Response(JSON.stringify({ features }), { status: 200 });
     },
   });
 
-  assert.equal(records.length, 3);
-  assert.deepEqual(calls.map((url) => url.searchParams.get("resultRecordCount")), ["2", "2"]);
-  assert.deepEqual(calls.map((url) => url.searchParams.get("resultOffset")), ["0", "2"]);
-  assert.equal("attributes" in records[0], false);
-  assert.equal(records[0].retrievedAt, "2026-07-29T00:00:00.000Z");
+  assert.deepEqual(result.records.map((record) => record.sourceRecordId), ["1", "4"]);
+  assert.deepEqual(result.rejections, [
+    { sourceRecordId: "2", reason: "owner-contact-field" },
+    { sourceRecordId: "3", reason: "malformed-record" },
+  ]);
+  assert.doesNotMatch(JSON.stringify(result.rejections), /must-not-retain/);
+  assert.deepEqual(calls.map((url) => url.searchParams.get("resultRecordCount")), ["4", "4"]);
+  assert.deepEqual(calls.map((url) => url.searchParams.get("resultOffset")), ["0", "4"]);
+  assert.equal("attributes" in result.records[0], false);
+  assert.equal(result.records[0].retrievedAt, "2026-07-29T00:00:00.000Z");
 });
 
 test("never requests more records than the approved run cap", async () => {
   const counts: string[] = [];
-  const records = await fetchMassGisRecords(validPolicy({ pageSize: 60, maxRecordsPerRun: 100 }), {
+  const result = await fetchMassGisRecords(validPolicy({ pageSize: 60, maxRecordsPerRun: 100 }), {
     fetch: async (input) => {
       const url = new URL(input.toString());
       const count = Number(url.searchParams.get("resultRecordCount"));
@@ -149,13 +163,14 @@ test("never requests more records than the approved run cap", async () => {
       }), { status: 200 });
     },
   });
-  assert.equal(records.length, 100);
+  assert.equal(result.records.length, 100);
+  assert.deepEqual(result.rejections, []);
   assert.deepEqual(counts, ["60", "40"]);
 });
 
 test("retries only transient responses and rejects decreasing object IDs", async () => {
   let attempts = 0;
-  const transientRecords = await fetchMassGisRecords(validPolicy({ pageSize: 2, maxRecordsPerRun: 100 }), {
+  const transientResult = await fetchMassGisRecords(validPolicy({ pageSize: 2, maxRecordsPerRun: 100 }), {
     fetch: async () => {
       attempts += 1;
       if (attempts < 4) return new Response("busy", { status: 429 });
@@ -163,7 +178,7 @@ test("retries only transient responses and rejects decreasing object IDs", async
     },
   });
   assert.equal(attempts, 4);
-  assert.deepEqual(transientRecords, []);
+  assert.deepEqual(transientResult, { records: [], rejections: [] });
 
   await assert.rejects(
     () => fetchMassGisRecords(validPolicy({ pageSize: 2, maxRecordsPerRun: 100 }), {
