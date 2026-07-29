@@ -53,7 +53,7 @@ export function QualificationPanel({ deal }: { deal: DealRecord }) {
   const resolveConflict = async () => {
     if (!conflictDecision) return;
     let domainError = "";
-    const result = await updateData((current) => {
+    const result = await updateData((current, mutationTime) => {
       try {
         return resolveFactConflict(
           current,
@@ -61,7 +61,7 @@ export function QualificationPanel({ deal }: { deal: DealRecord }) {
           conflictDecision.conflictId,
           conflictDecision.selectedSide,
           conflictDecision.basis,
-          new Date(),
+          mutationTime,
         );
       } catch (error) {
         domainError = safeError(error);
@@ -80,14 +80,14 @@ export function QualificationPanel({ deal }: { deal: DealRecord }) {
   const resolveRestriction = async () => {
     if (!restrictionDecision) return;
     let domainError = "";
-    const result = await updateData((current) => {
+    const result = await updateData((current, mutationTime) => {
       try {
         return resolveResearchRestriction(
           current,
           deal.id,
           restrictionDecision.restrictionId,
           restrictionDecision.note,
-          new Date(),
+          mutationTime,
         );
       } catch (error) {
         domainError = safeError(error);

@@ -223,7 +223,7 @@ export function writeStoredWorkspace(
 export async function mutateStoredWorkspace(
   storage: StorageLike,
   locks: WorkspaceLockManager | null,
-  updater: (current: DealFlowData) => DealFlowData,
+  updater: (current: DealFlowData, mutationTime: Date) => DealFlowData,
   now: Date | (() => Date) = () => new Date(),
 ): Promise<MutationResult> {
   if (locks === null) {
@@ -248,7 +248,7 @@ export async function mutateStoredWorkspace(
 
       let candidate: DealFlowData;
       try {
-        candidate = updater(latest.data);
+        candidate = updater(latest.data, mutationTime);
       } catch {
         return {
           ok: false,

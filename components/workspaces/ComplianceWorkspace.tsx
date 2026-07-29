@@ -79,11 +79,15 @@ export function ComplianceWorkspace() {
     checked: boolean,
   ) => {
     if (!selectedDeal) return;
-    void updateData((current) => ({
+    void updateData((current, mutationTime) => ({
       ...current,
       deals: current.deals.map((deal) =>
         deal.id === selectedDeal.id
-          ? { ...deal, [field]: checked, updatedAt: new Date().toISOString() }
+          ? {
+              ...deal,
+              [field]: checked,
+              updatedAt: mutationTime.toISOString(),
+            }
           : deal,
       ),
     }));

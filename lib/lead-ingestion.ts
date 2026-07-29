@@ -829,11 +829,40 @@ function addSourceRestriction(
   assertion: SourceAssertion,
   createdAt: string,
 ): void {
-  if (assertion.usageClassification !== "Restricted — research only") return;
+  if (assertion.usageClassification === "Restricted — research only") {
+    addAssertionRestriction(
+      deal,
+      assertion,
+      "Source restricted",
+      "This source is restricted to research use.",
+      createdAt,
+    );
+  }
+  const contactRestriction = contactStatusRestrictionCode(
+    assertion.facts.ownerContactStatus,
+  );
+  if (contactRestriction !== null) {
+    addAssertionRestriction(
+      deal,
+      assertion,
+      contactRestriction,
+      `The source records the owner contact status as ${assertion.facts.ownerContactStatus}.`,
+      createdAt,
+    );
+  }
+}
+
+function addAssertionRestriction(
+  deal: DealRecord,
+  assertion: SourceAssertion,
+  code: "Do not contact" | "Identity disputed" | "Source restricted",
+  reason: string,
+  createdAt: string,
+): void {
   if (
     deal.researchRestrictions.some(
       (restriction) =>
-        restriction.code === "Source restricted" &&
+        restriction.code === code &&
         restriction.sourceAssertionId === assertion.id,
     )
   ) {
@@ -843,18 +872,44 @@ function addSourceRestriction(
     id: stableId(
       "restriction",
       canonicalJson({
-        code: "Source restricted",
+        code,
         sourceAssertionId: assertion.id,
       }),
     ),
-    code: "Source restricted",
+    code,
     source: "Source assertion",
     sourceAssertionId: assertion.id,
-    reason: "This source is restricted to research use.",
+    reason,
     createdAt,
     resolvedAt: null,
     resolutionNote: "",
   });
+}
+
+function contactStatusRestrictionCode(
+  value: string,
+): "Do not contact" | "Identity disputed" | null {
+  const normalized = value
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/gu, " ")
+    .toLowerCase();
+  const compact = normalized.replace(/[^\p{L}\p{N}]+/gu, "");
+  if (
+    compact.includes("donotcontact") ||
+    compact.includes("optout") ||
+    compact.includes("optedout") ||
+    /\bdnc\b/u.test(normalized)
+  ) {
+    return "Do not contact";
+  }
+  if (
+    compact.includes("identitydisputed") ||
+    compact.includes("identitydispute")
+  ) {
+    return "Identity disputed";
+  }
+  return null;
 }
 
 function factsFromCandidate(

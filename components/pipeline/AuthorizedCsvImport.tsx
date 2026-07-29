@@ -189,8 +189,8 @@ export function AuthorizedCsvImport() {
     if (!preview?.plan || applyDisabled) return;
     const plan = preview.plan;
     let applicationError = "";
-    const result = await updateData((current) => {
-      const applied = applyLeadImportPlan(current, plan, new Date());
+    const result = await updateData((current, mutationTime) => {
+      const applied = applyLeadImportPlan(current, plan, mutationTime);
       if (!applied.ok) {
         applicationError = applied.error;
         throw new Error("Import plan rejected");

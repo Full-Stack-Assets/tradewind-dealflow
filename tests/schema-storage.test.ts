@@ -675,6 +675,24 @@ test("default mutation time is obtained only after the lock is granted", async (
   assert.equal(saved.updatedAt, "2026-07-28T12:00:00.000Z");
 });
 
+test("locked mutation passes its validation timestamp to the updater", async () => {
+  const storage = memoryStorage();
+  let updaterTime: Date | undefined;
+
+  const result = await mutateStoredWorkspace(
+    storage,
+    immediateLocks(),
+    (latest, mutationTime?: Date) => {
+      updaterTime = mutationTime;
+      return latest;
+    },
+    new Date("2026-07-28T12:00:00Z"),
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(updaterTime?.toISOString(), "2026-07-28T12:00:00.000Z");
+});
+
 test("locked mutation blocks corrupt storage before calling the updater", async () => {
   const storage = memoryStorage({ [LOCAL_DATA_KEY]: "{broken" });
   let updaterCalled = false;

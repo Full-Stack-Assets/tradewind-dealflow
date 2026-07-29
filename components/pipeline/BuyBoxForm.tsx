@@ -69,11 +69,11 @@ export function BuyBoxForm() {
 
     let storedVersion: number | null = null;
     let lockedValidationError = "";
-    const result = await updateData((current) => {
+    const result = await updateData((current, mutationTime) => {
       const normalized = normalizeLaunchBuyBox(
         candidate,
         current.buyBox,
-        new Date(),
+        mutationTime,
       );
       if (!normalized.ok) {
         lockedValidationError = normalized.errors.join(" ");

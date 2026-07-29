@@ -957,6 +957,30 @@ test("restricted assertions create related holds and new deals enter only Resear
   assert.equal(deal.researchRestrictions[0]?.source, "Source assertion");
 });
 
+test("source-recorded do-not-contact status creates the required active hold", () => {
+  const data = importCandidates(emptyWorkspace(), [
+    candidate({ ownerContactStatus: "Do not contact" }),
+  ]);
+  const deal = data.deals[0];
+  assert.ok(deal);
+  assert.equal(deal.researchRestrictions.length, 1);
+  assert.deepEqual(
+    deal.researchRestrictions[0] && {
+      code: deal.researchRestrictions[0].code,
+      source: deal.researchRestrictions[0].source,
+      sourceAssertionId: deal.researchRestrictions[0].sourceAssertionId,
+      resolvedAt: deal.researchRestrictions[0].resolvedAt,
+    },
+    {
+      code: "Do not contact",
+      source: "Source assertion",
+      sourceAssertionId: deal.sourceAssertions[0]?.id,
+      resolvedAt: null,
+    },
+  );
+  assert.equal(validateImport(data, fixedNow).ok, true);
+});
+
 test("equivalent unresolved disagreements do not duplicate conflicts", () => {
   const first = importCandidates(emptyWorkspace(), [candidate()]);
   const changed = importCandidates(first, [

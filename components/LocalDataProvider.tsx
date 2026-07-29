@@ -36,7 +36,7 @@ type DataContextValue = {
   data: DealFlowData;
   hydrated: boolean;
   updateData: (
-    updater: (current: DealFlowData) => DealFlowData,
+    updater: (current: DealFlowData, mutationTime: Date) => DealFlowData,
   ) => Promise<MutationResult>;
   replaceData: (next: DealFlowData) => Promise<MutationResult>;
   clearData: () => Promise<MutationResult>;
@@ -172,7 +172,9 @@ export function LocalDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const updateData = useCallback(
-    async (updater: (current: DealFlowData) => DealFlowData) => {
+    async (
+      updater: (current: DealFlowData, mutationTime: Date) => DealFlowData,
+    ) => {
       const result = await mutateStoredWorkspace(
         window.localStorage,
         getBrowserLocks(),
