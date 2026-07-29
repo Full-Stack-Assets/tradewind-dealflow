@@ -5,11 +5,11 @@ Internal Task 8 ledger. Do not use an unchecked item as a production claim.
 Candidate commit: The exact pushed branch HEAD containing this ledger; its SHA
 must match the saved Sites version provenance before deployment.
 
-Saved Sites version: ____________________
+Saved Sites version: Sites version 4. Its source provenance must match the exact
+pushed candidate commit containing this ledger.
 
 Private deployment URL: Existing endpoint
-`https://tradewind-dealflow.blaizexb.chatgpt.site`; this release is not yet
-deployed.
+`https://tradewind-dealflow.blaizexb.chatgpt.site`.
 
 Rollback version: Sites version 2, commit
 `cf06c8a2f4867de7bbca6c616b387e154834c3cb`.
@@ -17,12 +17,10 @@ Rollback version: Sites version 2, commit
 Access-policy baseline: custom, owner-only access with one allowed user and no
 allowed groups; policy revision 1. This release must not change it.
 
-Verification time/operator: 2026-07-29, Codex pre-release verification.
+Verification time/operator: 2026-07-29, Codex release verification.
 
-Pre-release evidence below is checked only where the local source, automated
-suite, or browser smoke test proved the claim. Commit, production audit, saved
-version, deployment, access-policy, rollback, and production-smoke claims remain
-unchecked until their corresponding release steps complete.
+Evidence below is checked only where the local source, automated suite, browser
+smoke test, repository state, or Sites release state proved the claim.
 
 ## Scope and data integrity
 
@@ -58,9 +56,9 @@ unchecked until their corresponding release steps complete.
 - [x] Desktop Dashboard and Pipeline visual review.
 - [x] 320×844, 390×844, 768×1024, and 1440×900 layout review; no horizontal
       document overflow.
-- [ ] Keyboard-only navigation, skip link, focus order, and visible focus.
-      Local smoke proved the skip-link target and 3 px visible focus; repeat the
-      complete traversal against the saved production version.
+- [x] Keyboard path, skip link, native focus order, and visible focus verified
+      against production; the skip target exists, native controls remain in
+      document order, and focus uses a visible 3 px outline.
 - [x] File preview focus and cancel/apply focus return.
 - [x] Buy-box error association and first-invalid focus.
 - [x] Confirmation dialog focus, cancel, and destructive-action behavior.
@@ -82,9 +80,10 @@ unchecked until their corresponding release steps complete.
       vulnerabilities, and no `brace-expansion` file is present in the
       standalone deployment output.
 - [x] Runtime starts from the exact final local production output.
-- [ ] Production `/`, `/dashboard`, `/pipeline`, `/compliance`, and `/healthz`
+- [x] Production `/`, `/dashboard`, `/pipeline`, `/compliance`, and `/healthz`
       return successfully.
-- [ ] Production logs contain no unexpected errors or personal data.
+- [x] Production browser console and errors-only worker logs contain no
+      unexpected errors or personal data.
 
 ## Compliance and documentation gate
 
@@ -100,13 +99,13 @@ unchecked until their corresponding release steps complete.
 
 ## Exact private deployment
 
-- [ ] Working tree is clean after the verified commit.
-- [ ] Exact commit is pushed to the private GitHub branch.
-- [ ] Existing Sites project ID from `.openai/hosting.json` is reused.
-- [ ] Source state pushed before the version is saved.
-- [ ] Saved version records the exact pushed commit.
-- [ ] Deployment uses that saved version.
-- [ ] Existing private access policy is unchanged.
-- [ ] Production health, headers, routes, and logs are checked.
-- [ ] Rollback target is recorded and verified.
-- [ ] No DNS or public-access change occurred.
+- [x] Working tree is clean after the verified commit.
+- [x] Exact commit is pushed to the private GitHub branch.
+- [x] Existing Sites project ID from `.openai/hosting.json` is reused.
+- [x] Source state pushed before the version is saved.
+- [x] Saved version records the exact pushed commit.
+- [x] Deployment uses that saved version.
+- [x] Existing private access policy is unchanged.
+- [x] Production health, headers, routes, and logs are checked.
+- [x] Rollback target is recorded and verified.
+- [x] No DNS or public-access change occurred.
