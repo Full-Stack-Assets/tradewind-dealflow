@@ -1,6 +1,9 @@
 /** Cloudflare Worker entry point for the static-capable DealFlow site. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { handleIngestionApi } from "../server/ingestion-api.ts";
+import { runDuePolicies } from "../server/ingestion-scheduler.ts";
+import type { D1Database } from "../server/d1.ts";
 
 interface Env {
   ASSETS: {
@@ -13,6 +16,7 @@ interface Env {
       };
     };
   };
+  DB: D1Database;
 }
 
 interface ExecutionContext {
@@ -29,6 +33,8 @@ interface ExecutionContext {
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    const ingestionResponse = await handleIngestionApi(request, env);
+    if (ingestionResponse) return ingestionResponse;
 
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
@@ -42,6 +48,13 @@ const worker = {
     }
 
     return handler.fetch(request, env, ctx);
+  },
+  async scheduled(
+    controller: { scheduledTime: number },
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<void> {
+    ctx.waitUntil(runDuePolicies(env, new Date(controller.scheduledTime)));
   },
 };
 

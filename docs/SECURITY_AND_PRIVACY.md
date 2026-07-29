@@ -1,16 +1,20 @@
 # Security and Privacy
 
-Release: local-first Phase 1
+Release: MassGIS ingestion
 
 ## Data-flow statement
 
-The application stores workspace data under the versioned browser key
-`tradewind-dealflow:v1`. There is no application database, account system,
-analytics event collector, seller/buyer API, or file-upload service in this
-release. Forms update the browser store; export actions create a local download.
+The application stores working Pipeline data under the versioned browser key
+`tradewind-dealflow:v2`. A D1 control plane stores MassGIS policies, run
+status/counts, owner/contact-free staged parcel records, and append-only audit
+events. There is no multi-device Pipeline synchronization, analytics event
+collector, seller/buyer API, contact-enrichment service, or file-upload
+service.
 
-Official-source links navigate to third-party government sites only when the
-user chooses them. Do not include personal data in a third-party URL.
+The Worker queries only the fixed official MassGIS endpoint and an explicit
+property-field allowlist. Geometry and the owner/contact denylist are rejected.
+The private Sites authentication layer supplies the authenticated-user header;
+the API stores only its normalized SHA-256 actor hash, never plaintext email.
 
 ## Implemented controls
 
@@ -26,8 +30,13 @@ user chooses them. Do not include personal data in a third-party URL.
   browser-permission headers
 - Minimal data fields for buyer verification; no sensitive document upload
 - No network mutation for outreach, offers, agreements, payments, or Deal Desk
-- No application session or cookie to steal in Phase 1
-- No server write endpoint, so application CSRF exposure is absent in Phase 1
+- Source API requires the Sites-authenticated user header, JSON bodies, a
+  64 KiB body limit, and an idempotency key for manual runs
+- Exact source-policy hashing, bounded pagination, transient-only retries,
+  overlap rejection, and abort handling
+- Append-only hash-chained audit events committed with state changes
+- No owner/contact fields in MassGIS requests, D1 staged records, or local
+  MassGIS import candidates
 - Test fixtures remain in the test suite and are not loaded into production
 
 The production Content Security Policy currently permits inline script and
@@ -57,9 +66,9 @@ site data can expose or erase records. Incognito/private sessions may discard
 records automatically. The application cannot restore a backup the operator
 did not create.
 
-This model deliberately avoids transmitting personal data to a project backend,
-but it is not appropriate for centralized teams, sensitive document custody,
-or regulated retention workflows.
+The D1 integration deliberately transmits only allowlisted property facts and
+hashed actor IDs. It is not appropriate for owner/contact enrichment,
+sensitive document custody, or regulated retention workflows.
 
 ## Data export and deletion
 
@@ -89,7 +98,7 @@ If a device, browser profile, or exported file may be compromised:
 
 Do not put incident details containing personal information into a public issue.
 
-## Phase 2 minimum controls
+## Controls required before broader server data or outreach
 
 Before server-side personal data or outreach is enabled, require:
 
@@ -106,4 +115,3 @@ Before server-side personal data or outreach is enabled, require:
 - dependency, container, and infrastructure scanning;
 - incident alerting, job monitoring, and provider kill switches;
 - vendor security/privacy agreements and counsel-approved data purposes.
-

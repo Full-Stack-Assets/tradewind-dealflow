@@ -9,6 +9,7 @@ import {
   StatusPill,
   WorkspaceHeader,
 } from "@/components/WorkspaceShell";
+import { SourceHealthStrip } from "@/components/workspaces/SourceHealthStrip";
 import {
   buildLeadOperatingSnapshot,
   resolveLeadDashboardAccess,
@@ -60,6 +61,7 @@ export function DashboardWorkspace() {
         }
       />
       <LocalDataNotice />
+      <SourceHealthStrip surface="dashboard" />
     </>
   );
 

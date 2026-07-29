@@ -1,4 +1,4 @@
-# Milestone 1 Release Evidence Ledger
+# MassGIS Ingestion Release Evidence Ledger
 
 Internal Task 8 ledger. Do not use an unchecked item as a production claim.
 
@@ -35,21 +35,32 @@ smoke test, repository state, or Sites release state proved the claim.
       contact block.
 - [x] Dashboard uses current real browser data and does not invent history.
 - [x] No seller, buyer, underwriting, provider, outreach, Academy, billing, AI,
-      backend, or public-marketplace work entered the Milestone 1 increment.
+      contact enrichment, or public-marketplace work entered this increment.
+- [x] D1 migration creates only policy, run, staged-record, and audit tables.
+- [x] Manual and scheduled triggers produce identical classifications.
+- [x] At least 100 safe records can be staged and imported in one action.
+- [x] Exact rerun and acknowledgement retry create no duplicate Pipeline deal.
+- [x] Owner/contact fields are absent from requests, D1, local import, exports,
+      and logs.
 
 ## Automated gate
 
-- [x] `npm run test:unit` — 143 passed, 0 failed.
+- [x] `npm run test:unit` — 166 passed, 0 failed.
 - [x] `npm run typecheck` — passed with no TypeScript errors.
 - [x] `npm run lint` — passed with no lint errors.
 - [x] `npm run build` — passed; standalone output generated.
-- [x] `npm run test:render` — 15 passed, 0 failed.
+- [x] `npm run test:render` — 17 passed, 0 failed.
 - [x] `git diff --check` — clean.
+- [ ] Fresh `npm audit --omit=dev` registry query — blocked by the execution
+      environment pending disclosure-specific approval to send dependency
+      metadata. `package-lock.json` is unchanged from the previously recorded
+      zero-production-vulnerability audit.
 - [x] Import idempotency and stale-plan checks pass.
 - [x] JSON corrupt/legacy/oversize/restore checks pass.
 - [x] `/healthz` contract and response security headers pass locally: HTTP 200,
-      `outreach: "disabled"`, `Cache-Control: no-store`, and baseline security
-      headers.
+      release `massgis-ingestion`, `outreach: "disabled"`, manual/scheduled
+      ingestion enabled, owner/contact fields disabled, `Cache-Control:
+      no-store`, and baseline security headers.
 
 ## Browser and accessibility gate
 
@@ -80,7 +91,7 @@ smoke test, repository state, or Sites release state proved the claim.
       vulnerabilities, and no `brace-expansion` file is present in the
       standalone deployment output.
 - [x] Runtime starts from the exact final local production output.
-- [x] Production `/`, `/dashboard`, `/pipeline`, `/compliance`, and `/healthz`
+- [ ] Production `/`, `/dashboard`, `/sources`, `/pipeline`, `/compliance`, and `/healthz`
       return successfully.
 - [x] Production browser console and errors-only worker logs contain no
       unexpected errors or personal data.
@@ -92,6 +103,8 @@ smoke test, repository state, or Sites release state proved the claim.
 - [x] January 1, 2027 Rhode Island transition warning remains explicit.
 - [x] No score authorizes contact or a transaction action.
 - [x] Outreach and provider mutations remain disabled.
+- [ ] MassGIS retrieval is query-only, bounded, owner/contact-free, and tied to
+      one approved policy hash.
 - [x] README, deployment, operator, data import, scoring/underwriting,
       compliance, backup/recovery, and known-limitations documents match code.
 - [x] Deferred authentication, underwriting, buyer verification, Approval

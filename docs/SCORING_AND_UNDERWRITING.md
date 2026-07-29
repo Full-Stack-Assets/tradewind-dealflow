@@ -140,9 +140,41 @@ but does not by itself receive the `Critical` floor. Generated comparable,
 repair, listing, buyer-proof, title/lien, and material-conflict research
 receives high task-class treatment. Exact task reasons remain visible.
 
+## Configurable legacy reference policy
+
+The consolidated foundation includes a separate, unwired reference module
+that reproduces one verified legacy underwriting rule using a versioned
+policy:
+
+```text
+maximum price =
+  ARV × acquisition percent
+  − repairs
+  − transaction fee
+  − ARV × friction percent
+```
+
+The synthetic version-1 fixture uses a 70% acquisition percentage, $15,000
+transaction fee, 2% ARV friction, and offer-ladder percentages of 88%, 94%,
+and 100% of the calculated maximum. The result records the policy version,
+expression, approved-comparable count, maximum price, and rounded ladder.
+
+Final reference output blocks unless at least three approved usable
+comparables are recorded. It also blocks invalid ARV, repairs, comparable
+count, policy version, threshold, rate, fee, ladder, or a calculated maximum
+below zero. A blocked result contains reasons and never contains an offer
+ladder.
+
+This module is parity evidence, not a universal investment rule, appraisal,
+valuation, legal approval, or authorization to prepare or send an offer. It
+is not connected to current property records or the Deal Lab. A future
+evidence-ranged case system must use sourced ranges, explicit comparable
+approval, versioned policy, and a recorded human override when its approved
+governance permits one.
+
 ## Not implemented: underwriting case engine
 
-Milestone 1 does not implement the requested evidence-ranged underwriting
+The current product does not implement the requested evidence-ranged underwriting
 case, manual comparable approval, repair-range approval, sensitivity table,
 confidence gate, opening range, walk-away range, or formal-offer preparation.
 

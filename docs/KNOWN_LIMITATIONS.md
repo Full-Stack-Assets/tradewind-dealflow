@@ -2,10 +2,12 @@
 
 ## Current release limits
 
-### Local-only data
+### Split local and server control-plane data
 
-- No login, authentication, role permissions, server database, multi-device
-  sync, encrypted object storage, or server backup is implemented.
+- Private Sites authentication protects the application, and D1 stores the
+  MassGIS control plane. There is no application-managed role system,
+  multi-device Pipeline sync, encrypted object storage, or server Pipeline
+  backup.
 - Browser storage is the current system of record and can be erased or exposed
   by browser/device conditions.
 - Web Locks are required for every mutation. Without them, review and export
@@ -25,6 +27,10 @@
 - Owner/contact fields are rejected from the property import.
 - The current preview is not retained as an immutable import-batch audit
   record.
+- Only the MassGIS parcels adapter is automated. Municipal portals, registry
+  data, contact enrichment, and arbitrary vendor schemas are not connected.
+- Scheduled runs stage owner-free records only; they do not mutate the local
+  Pipeline while the browser is closed.
 
 ### Qualification and reporting
 
@@ -43,6 +49,21 @@
   reload the page to advance that date.
 - Counts can be factual zero; unsupported rates, values, and rankings display
   `Not enough data` or remain unavailable.
+- The configurable underwriting reference engine is parity evidence only. It
+  is not wired to Deal Lab, formal offers, or production property decisions,
+  and it is not an appraisal or legal approval.
+
+### Legacy consolidation
+
+- No raw legacy production record has been migrated.
+- The database inspection tool emits expected table names, column names,
+  counts, and lifecycle-state totals only; it never emits row values.
+- Raw databases, real lead/comparable exports, proof-of-funds files, and
+  extracted archives remain outside the repository.
+- Organization identity, tenant authorization, and durable lifecycle
+  persistence remain deferred to the next platform-foundation subsystem.
+- Reference parity demonstrates reproducible behavior, not valuation,
+  appraisal, legal approval, or permission to generate a formal offer.
 
 ### Revenue-loop milestones not implemented
 
@@ -60,7 +81,7 @@
 
 ### External actions
 
-- No property-data, CRM, seller form, buyer form, email, SMS, voice, direct
+- No CRM, seller form, buyer form, email, SMS, voice, direct
   mail, payment, banking, title, or closing provider is connected.
 - No form sends outreach or creates a provider mutation.
 - No executable legal document or attorney-approved template is generated.
