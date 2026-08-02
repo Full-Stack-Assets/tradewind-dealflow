@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { appendAuditEvent } from "../lib/ingestion/audit.ts";
 import type { SourcePolicy } from "../lib/ingestion/policy.ts";
 import { handleIngestionApi } from "../server/ingestion-api.ts";
 import type { D1Database } from "../server/d1.ts";
 import { runDuePolicies } from "../server/ingestion-scheduler.ts";
 import { createRun, approvePolicy, listRecords, listRuns } from "../server/ingestion-store.ts";
 import { runIngestion } from "../server/ingestion-runner.ts";
-import { closeTestD1, createTestD1 } from "./helpers/d1.ts";
+import { applyTestD1Migrations, closeTestD1, createTestD1 } from "./helpers/d1.ts";
 
 const NOW = "2026-07-29T12:00:00.000Z";
 
@@ -308,6 +309,104 @@ test("run admission rejects a policy superseded before its insert", async () => 
     );
     assert.equal((await listRuns(db)).length, 0);
   });
+});
+
+test("migration remediates duplicate active runs without deleting history", async () => {
+  const db = await createTestD1({ throughMigration: 0 });
+  try {
+    const policy = await approvePolicy(db, validPolicy(), "actor", new Date(NOW));
+    await db.batch([
+      db.prepare(
+        "INSERT INTO ingestion_runs (id, policy_id, policy_hash, trigger, status, idempotency_key, requested_at, started_at) VALUES (?, ?, ?, 'operator', 'running', ?, ?, ?)",
+      ).bind(
+        "run-canonical",
+        policy.id,
+        policy.policyHash,
+        "migration-canonical",
+        "2026-07-29T10:00:00.000Z",
+        "2026-07-29T10:00:00.000Z",
+      ),
+      db.prepare(
+        "INSERT INTO ingestion_runs (id, policy_id, policy_hash, trigger, status, idempotency_key, requested_at, started_at) VALUES (?, ?, ?, 'schedule', 'queued', ?, ?, NULL)",
+      ).bind(
+        "run-duplicate",
+        policy.id,
+        policy.policyHash,
+        "migration-duplicate",
+        "2026-07-29T11:00:00.000Z",
+      ),
+      db.prepare(
+        "INSERT INTO source_records (id, run_id, source_identity, source_record_id, retrieved_at, raw_json, normalized_json, raw_fingerprint, normalized_fingerprint, classification, reason_code, imported_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'safe', NULL, NULL)",
+      ).bind(
+        "record-on-duplicate",
+        "run-duplicate",
+        "parcel-migration-history",
+        "99",
+        "2026-07-29T11:00:00.000Z",
+        "{}",
+        "{}",
+        "raw-migration-history",
+        "normalized-migration-history",
+      ),
+    ]);
+    await appendAuditEvent(
+      db,
+      db.prepare("UPDATE ingestion_runs SET status = status WHERE id = ?").bind("run-duplicate"),
+      {
+        id: "audit-run-duplicate",
+        occurredAt: "2026-07-29T11:00:00.000Z",
+        actorId: "actor",
+        eventType: "ingestion-run-started",
+        aggregateType: "ingestion-run",
+        aggregateId: "run-duplicate",
+        metadataJson: "{}",
+      },
+    );
+    const auditBefore = await db.prepare(
+      "SELECT id, previous_hash, event_hash FROM audit_events ORDER BY sequence",
+    ).all<{ id: string; previous_hash: string; event_hash: string }>();
+
+    await assert.doesNotReject(() => applyTestD1Migrations(db, { fromMigration: 1 }));
+
+    const runs = await db.prepare(
+      "SELECT id, status, completed_at, failed_count, last_error_code FROM ingestion_runs ORDER BY requested_at, rowid",
+    ).all<{
+      id: string;
+      status: string;
+      completed_at: string | null;
+      failed_count: number;
+      last_error_code: string | null;
+    }>();
+    assert.deepEqual(runs.results[0], {
+      id: "run-canonical",
+      status: "running",
+      completed_at: null,
+      failed_count: 0,
+      last_error_code: null,
+    });
+    assert.equal(runs.results[1]?.id, "run-duplicate");
+    assert.equal(runs.results[1]?.status, "failed");
+    assert.match(runs.results[1]?.completed_at ?? "", /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(runs.results[1]?.failed_count, 1);
+    assert.equal(runs.results[1]?.last_error_code, "migration-duplicate-active-run");
+    assert.equal(runs.results.length, 2);
+
+    const active = await db.prepare(
+      "SELECT id FROM ingestion_runs WHERE policy_id = ? AND status IN ('queued', 'running')",
+    ).bind(policy.id).all<{ id: string }>();
+    assert.deepEqual(active.results, [{ id: "run-canonical" }]);
+    assert.equal(
+      (await db.prepare("SELECT run_id FROM source_records WHERE id = 'record-on-duplicate'").first<{ run_id: string }>())?.run_id,
+      "run-duplicate",
+    );
+    const auditAfter = await db.prepare(
+      "SELECT id, previous_hash, event_hash FROM audit_events ORDER BY sequence",
+    ).all<{ id: string; previous_hash: string; event_hash: string }>();
+    assert.deepEqual(auditAfter.results, auditBefore.results);
+    assert.deepEqual((await db.prepare("PRAGMA foreign_key_check").all<Record<string, unknown>>()).results, []);
+  } finally {
+    await closeTestD1(db);
+  }
 });
 
 test("identical ID-less rejections on separate pages do not roll back safe siblings", async () => {
