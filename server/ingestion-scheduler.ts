@@ -27,7 +27,7 @@ export async function runDuePolicies(env: D1Bindings, now: Date): Promise<void> 
   const local = localParts(now);
   const targetMinutes = policy.policy.scheduleHour * 60 + policy.policy.scheduleMinute;
   const currentMinutes = local.hour * 60 + local.minute;
-  if (currentMinutes < targetMinutes) return;
+  if (currentMinutes < targetMinutes || currentMinutes >= targetMinutes + 60) return;
   const idempotencyKey = `schedule:${policy.id}:${policy.version}:${local.date}`;
   const prior = (await listRuns(env.DB, 100)).find((run) => run.idempotencyKey === idempotencyKey);
   if (prior) return;
@@ -40,4 +40,3 @@ export async function runDuePolicies(env: D1Bindings, now: Date): Promise<void> 
     signal: new AbortController().signal,
   });
 }
-

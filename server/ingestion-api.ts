@@ -51,12 +51,19 @@ function asObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function isSameOrigin(request: Request, url: URL): boolean {
+  const origin = request.headers.get("origin");
+  if (origin && origin !== url.origin) return false;
+  return request.headers.get("sec-fetch-site") !== "cross-site";
+}
+
 export async function handleIngestionApi(
   request: Request,
   env: D1Bindings,
 ): Promise<Response | null> {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/sources/")) return null;
+  if (!isSameOrigin(request, url)) return json({ error: "same-origin request required" }, 403);
   const actor = await actorId(request);
   if (!actor) return json({ error: "authenticated user required" }, 401);
 
@@ -124,4 +131,3 @@ export async function handleIngestionApi(
     return json({ error: message }, status);
   }
 }
-

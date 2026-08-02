@@ -25,6 +25,12 @@ function isAbort(error: unknown, signal: AbortSignal): boolean {
   return signal.aborted || (error instanceof Error && error.name === "AbortError");
 }
 
+function sourceFailureReason(error: unknown): "source-schema-change" | "source-failure" {
+  return error instanceof Error && /unknown field in MassGIS response schema|unexpected geometry in MassGIS response/i.test(error.message)
+    ? "source-schema-change"
+    : "source-failure";
+}
+
 export async function runIngestion(input: RunIngestionInput): Promise<IngestionRun> {
   const active = await getActivePolicy(input.db);
   const computedHash = await hashPolicy(input.policy.policy);
@@ -65,8 +71,7 @@ export async function runIngestion(input: RunIngestionInput): Promise<IngestionR
       created.run.id,
       persistedPages > 0 ? "partial" : "failed",
       input.actorId,
-      "source-failure",
+      sourceFailureReason(error),
     );
   }
 }
-

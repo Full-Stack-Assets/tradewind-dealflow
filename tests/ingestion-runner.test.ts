@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { SourcePolicy } from "../lib/ingestion/policy.ts";
-import { createRun, approvePolicy, listRecords } from "../server/ingestion-store.ts";
+import { handleIngestionApi } from "../server/ingestion-api.ts";
+import type { D1Database } from "../server/d1.ts";
+import { runDuePolicies } from "../server/ingestion-scheduler.ts";
+import { createRun, approvePolicy, listRecords, listRuns } from "../server/ingestion-store.ts";
 import { runIngestion } from "../server/ingestion-runner.ts";
 import { closeTestD1, createTestD1 } from "./helpers/d1.ts";
 
@@ -115,6 +118,29 @@ test("manual and scheduled triggers produce identical classifications", async ()
   assert.deepEqual(manual.counts, scheduled.counts);
 });
 
+test("source API rejects cross-origin requests before storage access", async () => {
+  let storageAccessed = false;
+  const db = {
+    prepare() {
+      storageAccessed = true;
+      throw new Error("storage must not be accessed");
+    },
+    async batch() {
+      storageAccessed = true;
+      throw new Error("storage must not be accessed");
+    },
+  } as D1Database;
+  const response = await handleIngestionApi(new Request("https://dealflow.test/api/sources/policy", {
+    headers: {
+      "oai-authenticated-user-email": "operator@example.com",
+      origin: "https://cross-origin.example",
+    },
+  }), { DB: db });
+
+  assert.equal(response?.status, 403);
+  assert.equal(storageAccessed, false);
+});
+
 test("125 safe records create no per-record approval rows", async () => {
   const result = await runFixture("operator", 125);
   assert.equal(result.result.status, "staged");
@@ -160,6 +186,50 @@ test("changed fingerprints stage conflicts and invalid records become exceptions
     assert.equal(changed.changedCount, 1);
     assert.equal(changed.exceptionCount, 1);
     assert.equal((await listRecords(db, "changed"))[0].reasonCode, "source-conflict");
+  });
+});
+
+test("a later source schema change preserves safe pages with its distinct reason", async () => {
+  await withDb(async (db) => {
+    const policy = await approvePolicy(db, validPolicy(), "actor", new Date(NOW));
+    const result = await runIngestion({
+      db,
+      policy,
+      trigger: "operator",
+      idempotencyKey: "schema-change",
+      actorId: "actor",
+      signal: new AbortController().signal,
+      fetchOptions: {
+        fetch: async (input) => {
+          const url = new URL(input.toString());
+          if (url.searchParams.get("resultOffset") === "0") return fixtureFetch(50)(input);
+          return new Response(JSON.stringify({
+            features: [feature(51, { NEW_SOURCE_FIELD: "changed schema" })],
+          }), { status: 200 });
+        },
+        retrievedAt: NOW,
+      },
+    });
+
+    assert.equal(result.status, "partial");
+    assert.equal(result.safeCount, 50);
+    assert.equal(result.lastErrorCode, "source-schema-change");
+    assert.equal((await listRecords(db)).length, 50);
+  });
+});
+
+test("an hourly scheduler tick outside the approved daily window creates no run", async () => {
+  await withDb(async (db) => {
+    await approvePolicy(db, validPolicy(), "actor", new Date(NOW));
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = fixtureFetch(0) as typeof globalThis.fetch;
+    try {
+      await runDuePolicies({ DB: db }, new Date("2026-07-29T19:00:00.000Z"));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    assert.equal((await listRuns(db)).length, 0);
   });
 });
 
@@ -217,4 +287,3 @@ test("record cap, transient retry, permanent failure, cancellation, and overlap 
     );
   });
 });
-
