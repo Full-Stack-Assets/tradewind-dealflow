@@ -125,12 +125,23 @@ test("sources renders bounded approval, scheduling, intake, and audit without ou
   const html = await response.text();
 
   assert.match(html, /MassGIS Property Tax Parcels/i);
+  assert.match(html, /Approval diff/i);
+  assert.match(html, /Minimum last-sale age/i);
   assert.match(html, /Run now/i);
   assert.match(html, /Latest source run counts/i);
   assert.match(html, /Grouped, not per-record approval/i);
   assert.match(html, /Import all safe records/i);
   assert.match(html, /Download audit/i);
+  assert.doesNotMatch(html, /MassGIS ingestion release/i);
   assert.doesNotMatch(html, /Send campaign|Text owner|Email owner|Autodial|OWNER1|OWN_ADDR/i);
+});
+
+test("pipeline and dashboard render their concise source operating health", async () => {
+  const pipeline = await (await render("/pipeline")).text();
+  const dashboard = await (await render("/dashboard")).text();
+
+  assert.match(pipeline, /Latest import result/i);
+  assert.match(dashboard, /Next scheduled run/i);
 });
 
 test("dashboard withholds factual output until browser storage is hydrated", async () => {

@@ -1,4 +1,5 @@
 import { canonicalJson, type SourcePolicy } from "../lib/ingestion/policy.ts";
+import type { SourceImportOutcomeCounts } from "../lib/ingestion/contracts.ts";
 import type { D1Bindings } from "./d1.ts";
 import {
   approvePolicy,
@@ -49,6 +50,18 @@ async function readJson(request: Request): Promise<unknown> {
 function asObject(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("request body must be an object");
   return value as Record<string, unknown>;
+}
+
+function importOutcomeCounts(value: unknown): SourceImportOutcomeCounts {
+  const counts = asObject(value);
+  const expected = ["applied", "changedSource", "exactReimport", "possiblePropertyMatch", "excluded"] as const;
+  if (
+    Object.keys(counts).length !== expected.length
+    || expected.some((key) => !Number.isInteger(counts[key]) || Number(counts[key]) < 0)
+  ) {
+    throw new Error("outcomeCounts must contain non-negative integer import outcomes");
+  }
+  return counts as SourceImportOutcomeCounts;
 }
 
 function isSameOrigin(request: Request, url: URL): boolean {
@@ -109,7 +122,15 @@ export async function handleIngestionApi(
       if (!Array.isArray(body.recordIds) || body.recordIds.some((id) => typeof id !== "string")) {
         return json({ error: "recordIds must be an array of strings" }, 400);
       }
-      return json({ acknowledged: await markRecordsImported(env.DB, body.recordIds, actor) });
+      return json({
+        acknowledged: await markRecordsImported(
+          env.DB,
+          body.recordIds,
+          actor,
+          new Date(),
+          importOutcomeCounts(body.outcomeCounts),
+        ),
+      });
     }
     if (request.method === "GET" && url.pathname === "/api/sources/audit") {
       const result = await env.DB.prepare(

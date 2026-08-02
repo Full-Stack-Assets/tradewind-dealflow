@@ -8,6 +8,7 @@ import {
   type SourcePolicy,
   validatePolicy,
 } from "../lib/ingestion/policy.ts";
+import { approvePolicy, createRun, markRecordsImported } from "../server/ingestion-store.ts";
 import { closeTestD1, createTestD1, tableNames } from "./helpers/d1.ts";
 
 function validPolicy(overrides: Partial<SourcePolicy> = {}): SourcePolicy {
@@ -105,4 +106,48 @@ test("audit event commits the state change and extends the hash chain", async (t
     { ...event, id: "event-2", eventType: "policy.scheduled" },
   );
   assert.equal(second.previousHash, first.eventHash);
+});
+
+test("import acknowledgement counts only real safe records and audits local outcomes", async (t) => {
+  const db = await createTestD1();
+  t.after(() => closeTestD1(db));
+  const now = new Date("2026-07-29T12:00:00.000Z");
+  const policy = await approvePolicy(db, validPolicy(), "actor", now);
+  const { run } = await createRun(db, policy, "operator", "ack-run", "actor", now);
+  await db.batch([
+    db.prepare(
+      "INSERT INTO source_records (id, run_id, source_identity, source_record_id, retrieved_at, raw_json, normalized_json, raw_fingerprint, normalized_fingerprint, classification, reason_code, imported_at) VALUES (?, ?, ?, ?, ?, '{}', '{}', ?, ?, 'safe', NULL, NULL)",
+    ).bind("record-safe", run.id, "safe-identity", "safe-source", now.toISOString(), "raw-safe", "normalized-safe"),
+    db.prepare(
+      "INSERT INTO source_records (id, run_id, source_identity, source_record_id, retrieved_at, raw_json, normalized_json, raw_fingerprint, normalized_fingerprint, classification, reason_code, imported_at) VALUES (?, ?, ?, ?, ?, '{}', '{}', ?, ?, 'exception', 'invalid-record', NULL)",
+    ).bind("record-exception", run.id, "exception-identity", "exception-source", now.toISOString(), "raw-exception", "normalized-exception"),
+  ]);
+  const outcomeCounts = {
+    applied: 1,
+    changedSource: 0,
+    exactReimport: 0,
+    possiblePropertyMatch: 0,
+    excluded: 2,
+  };
+
+  const acknowledged = await markRecordsImported(
+    db,
+    ["record-safe", "record-exception", "record-missing"],
+    "actor",
+    now,
+    outcomeCounts,
+  );
+
+  assert.equal(acknowledged, 1);
+  assert.equal(
+    (await db.prepare("SELECT imported_count FROM ingestion_runs WHERE id = ?").bind(run.id).first<{ imported_count: number }>())?.imported_count,
+    1,
+  );
+  const event = await db.prepare(
+    "SELECT metadata_json FROM audit_events WHERE event_type = 'source-records-imported'",
+  ).first<{ metadata_json: string }>();
+  assert.deepEqual(JSON.parse(event?.metadata_json ?? "null"), {
+    outcomeCounts,
+    recordIds: ["record-safe"],
+  });
 });

@@ -79,7 +79,7 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
             {children}
           </main>
           <footer className="workspace-footer">
-            <span>Tradewind DealFlow · MassGIS ingestion release</span>
+            <span>Tradewind DealFlow · Local-first release</span>
             <span>
               Educational and operational software—not legal, tax, financial,
               brokerage, appraisal, or investment advice.

@@ -4025,6 +4025,10 @@ input[type="radio"] {
   margin: 0;
 }
 
+.snapshot-boundary strong {
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 1120px) {
   .hero {
     grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);

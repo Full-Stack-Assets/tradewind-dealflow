@@ -1,5 +1,5 @@
 import { appendAuditEvent } from "../lib/ingestion/audit.ts";
-import type { IngestionRun, StagedSourceRecord } from "../lib/ingestion/contracts.ts";
+import type { IngestionRun, SourceImportOutcomeCounts, StagedSourceRecord } from "../lib/ingestion/contracts.ts";
 import type { MassGisCandidate, MassGisRecordRejection } from "../lib/ingestion/massgis.ts";
 import { canonicalJson, hashPolicy, validatePolicy, type SourcePolicy } from "../lib/ingestion/policy.ts";
 import type { D1Database, D1PreparedStatement } from "./d1.ts";
@@ -346,11 +346,19 @@ export async function markRecordsImported(
   recordIds: string[],
   actorId: string,
   now = new Date(),
+  outcomeCounts?: SourceImportOutcomeCounts,
 ): Promise<number> {
-  const uniqueIds = [...new Set(recordIds)].slice(0, 10_000);
+  const uniqueIds = [...new Set(recordIds)].slice(0, 500);
   if (uniqueIds.length === 0) return 0;
+  const placeholders = uniqueIds.map(() => "?").join(", ");
+  const recognized = await db.prepare(
+    `SELECT id FROM source_records WHERE classification = 'safe' AND id IN (${placeholders})`,
+  ).bind(...uniqueIds).all<{ id: string }>();
+  const recognizedIds = new Set(recognized.results.map(({ id }) => id));
+  const safeIds = uniqueIds.filter((id) => recognizedIds.has(id));
+  if (safeIds.length === 0) return 0;
   const timestamp = now.toISOString();
-  const updates = uniqueIds.flatMap((id) => [
+  const updates = safeIds.flatMap((id) => [
     db.prepare(
       "UPDATE ingestion_runs SET imported_count = imported_count + 1 WHERE id = (SELECT run_id FROM source_records WHERE id = ? AND classification = 'safe' AND imported_at IS NULL)",
     ).bind(id),
@@ -365,7 +373,7 @@ export async function markRecordsImported(
     eventType: "source-records-imported",
     aggregateType: "source-record-batch",
     aggregateId: newId("import"),
-    metadataJson: canonicalJson({ recordIds: uniqueIds }),
+    metadataJson: canonicalJson({ outcomeCounts: outcomeCounts ?? null, recordIds: safeIds }),
   });
-  return uniqueIds.length;
+  return safeIds.length;
 }
