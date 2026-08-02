@@ -167,6 +167,37 @@ test("exact rerun counts duplicates without creating new source records", async 
   });
 });
 
+test("identical attributes retrieved later remain exact duplicates", async () => {
+  await withDb(async (db) => {
+    const policy = await approvePolicy(db, validPolicy(), "actor", new Date(NOW));
+    const shared = {
+      db,
+      policy,
+      trigger: "operator" as const,
+      actorId: "actor",
+      signal: new AbortController().signal,
+    };
+    const first = await runIngestion({
+      ...shared,
+      idempotencyKey: "retrieved-first",
+      fetchOptions: { fetch: fixtureFetch(1), retrievedAt: NOW },
+    });
+    const second = await runIngestion({
+      ...shared,
+      idempotencyKey: "retrieved-later",
+      fetchOptions: {
+        fetch: fixtureFetch(1),
+        retrievedAt: "2026-07-30T12:00:00.000Z",
+      },
+    });
+
+    assert.equal(first.safeCount, 1);
+    assert.equal(second.duplicateCount, 1);
+    assert.equal(second.changedCount, 0);
+    assert.equal((await listRecords(db)).length, 1);
+  });
+});
+
 test("changed fingerprints stage conflicts and invalid records become exceptions", async () => {
   await withDb(async (db) => {
     const policy = await approvePolicy(db, validPolicy(), "actor", new Date(NOW));
@@ -230,6 +261,92 @@ test("an hourly scheduler tick outside the approved daily window creates no run"
     }
 
     assert.equal((await listRuns(db)).length, 0);
+  });
+});
+
+test("simultaneous same-key admissions return one stored run", async () => {
+  await withDb(async (db) => {
+    const policy = await approvePolicy(db, validPolicy(), "actor", new Date(NOW));
+    const inputs = ["first", "second"].map(() =>
+      createRun(db, policy, "operator", "shared-key", "actor", new Date(NOW))
+    );
+    const [first, second] = await Promise.all(inputs);
+
+    assert.equal(first.run.id, second.run.id);
+    assert.equal((await listRuns(db)).length, 1);
+  });
+});
+
+test("simultaneous distinct-key admissions allow only one active run per policy", async () => {
+  await withDb(async (db) => {
+    const policy = await approvePolicy(db, validPolicy(), "actor", new Date(NOW));
+    const outcomes = await Promise.allSettled([
+      createRun(db, policy, "operator", "distinct-a", "actor", new Date(NOW)),
+      createRun(db, policy, "operator", "distinct-b", "actor", new Date(NOW)),
+    ]);
+
+    assert.equal(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 1);
+    const rejection = outcomes.find((outcome) => outcome.status === "rejected");
+    assert.match(String(rejection?.status === "rejected" ? rejection.reason : ""), /already in progress/i);
+    assert.equal((await listRuns(db)).length, 1);
+  });
+});
+
+test("run admission rejects a policy superseded before its insert", async () => {
+  await withDb(async (db) => {
+    const stalePolicy = await approvePolicy(db, validPolicy(), "actor", new Date(NOW));
+    await approvePolicy(
+      db,
+      validPolicy({ maximumAssessedValue: 700_000 }),
+      "actor",
+      new Date("2026-07-29T12:01:00.000Z"),
+    );
+
+    await assert.rejects(
+      () => createRun(db, stalePolicy, "operator", "stale-policy", "actor", new Date(NOW)),
+      /no longer active/i,
+    );
+    assert.equal((await listRuns(db)).length, 0);
+  });
+});
+
+test("identical ID-less rejections on separate pages do not roll back safe siblings", async () => {
+  await withDb(async (db) => {
+    const policy = await approvePolicy(
+      db,
+      validPolicy({ pageSize: 2 }),
+      "actor",
+      new Date(NOW),
+    );
+    const malformed = feature(0, { OBJECTID: "not-an-id" });
+    const pages = [
+      [feature(1), malformed],
+      [feature(2), malformed],
+      [],
+    ];
+    const result = await runIngestion({
+      db,
+      policy,
+      trigger: "operator",
+      idempotencyKey: "repeated-rejection",
+      actorId: "actor",
+      signal: new AbortController().signal,
+      fetchOptions: {
+        fetch: async (input) => {
+          const url = new URL(input.toString());
+          const page = Number(url.searchParams.get("resultOffset")) / 2;
+          return new Response(JSON.stringify({ features: pages[page] }), { status: 200 });
+        },
+        retrievedAt: NOW,
+      },
+    });
+
+    const records = await listRecords(db);
+    assert.equal(result.status, "staged");
+    assert.equal(result.safeCount, 2);
+    assert.equal(result.exceptionCount, 2);
+    assert.equal(records.filter((record) => record.classification === "safe").length, 2);
+    assert.equal(records.filter((record) => record.classification === "exception").length, 2);
   });
 });
 

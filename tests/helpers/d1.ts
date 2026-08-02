@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 
 import { Miniflare } from "miniflare";
 
@@ -11,12 +11,15 @@ export async function createTestD1() {
     d1Databases: ["DB"],
   });
   const db = await miniflare.getD1Database("DB");
-  const migration = await readFile(
-    new URL("../../drizzle/0000_massgis_ingestion.sql", import.meta.url),
-    "utf8",
-  );
-  for (const statement of migration.split("--> statement-breakpoint")) {
-    if (statement.trim()) await db.prepare(statement).run();
+  const migrationsDirectory = new URL("../../drizzle/", import.meta.url);
+  const migrations = (await readdir(migrationsDirectory))
+    .filter((name) => /^\d+.*\.sql$/.test(name))
+    .sort();
+  for (const name of migrations) {
+    const migration = await readFile(new URL(name, migrationsDirectory), "utf8");
+    for (const statement of migration.split("--> statement-breakpoint")) {
+      if (statement.trim()) await db.prepare(statement).run();
+    }
   }
   instances.set(db, miniflare);
   return db;

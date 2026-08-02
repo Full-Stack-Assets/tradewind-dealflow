@@ -8,6 +8,13 @@
       "when": 1785322226915,
       "tag": "0000_massgis_ingestion",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1785711459892,
+      "tag": "0001_harden_ingestion_runs",
+      "breakpoints": true
     }
   ]
 }

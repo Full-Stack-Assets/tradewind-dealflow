@@ -206,15 +206,29 @@ export async function createRun(
   const insert = db.prepare(
     "INSERT INTO ingestion_runs (id, policy_id, policy_hash, trigger, status, idempotency_key, requested_at, started_at) VALUES (?, ?, ?, ?, 'running', ?, ?, ?)",
   ).bind(id, policy.id, policy.policyHash, trigger, idempotencyKey, timestamp, timestamp);
-  await appendAuditEvent(db, insert, {
-    id: newId("audit"),
-    occurredAt: timestamp,
-    actorId,
-    eventType: "ingestion-run-started",
-    aggregateType: "ingestion-run",
-    aggregateId: id,
-    metadataJson: canonicalJson({ policyHash: policy.policyHash, trigger }),
-  });
+  try {
+    await appendAuditEvent(db, insert, {
+      id: newId("audit"),
+      occurredAt: timestamp,
+      actorId,
+      eventType: "ingestion-run-started",
+      aggregateType: "ingestion-run",
+      aggregateId: id,
+      metadataJson: canonicalJson({ policyHash: policy.policyHash, trigger }),
+    });
+  } catch (error) {
+    const idempotent = await getRunByIdempotencyKey(db, idempotencyKey);
+    if (idempotent) return { run: idempotent, existing: true };
+    const admitted = await db.prepare(
+      "SELECT id FROM ingestion_runs WHERE policy_id = ? AND status IN ('queued', 'running') LIMIT 1",
+    ).bind(policy.id).first<{ id: string }>();
+    if (admitted) throw new Error("an ingestion run is already in progress");
+    const active = await getActivePolicy(db);
+    if (!active || active.id !== policy.id || active.policyHash !== policy.policyHash) {
+      throw new Error("approved policy is no longer active");
+    }
+    throw error;
+  }
   const run = await getRun(db, id);
   if (!run) throw new Error("ingestion run was not persisted");
   return { run, existing: false };
@@ -223,6 +237,7 @@ export async function createRun(
 export async function persistPage(
   db: D1Database,
   runId: string,
+  pageOrdinal: number,
   records: MassGisCandidate[],
   rejections: MassGisRecordRejection[],
   actorId: string,
@@ -259,11 +274,11 @@ export async function persistPage(
   for (let index = 0; index < rejections.length; index += 1) {
     const rejection = rejections[index];
     const json = canonicalJson(rejection);
-    const fingerprint = await digest(`${runId}:${index}:${json}`);
+    const fingerprint = await digest(`${runId}:${pageOrdinal}:${index}:${json}`);
     statements.push(db.prepare(
       "INSERT INTO source_records (id, run_id, source_identity, source_record_id, retrieved_at, raw_json, normalized_json, raw_fingerprint, normalized_fingerprint, classification, reason_code, imported_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'exception', 'invalid-record', NULL)",
     ).bind(
-      newId("record"), runId, `massgis-rejection:${runId}:${index}:${fingerprint}`,
+      newId("record"), runId, `massgis-rejection:${runId}:${pageOrdinal}:${index}:${fingerprint}`,
       rejection.sourceRecordId ?? "", now.toISOString(), "{}", json, fingerprint, fingerprint,
     ));
   }
