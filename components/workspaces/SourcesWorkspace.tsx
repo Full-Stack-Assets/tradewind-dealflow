@@ -5,16 +5,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalData } from "@/components/LocalDataProvider";
 import { LocalDataNotice, StatusPill, WorkspaceHeader } from "@/components/WorkspaceShell";
 import {
-  acknowledgeImportedRecords,
+  acknowledgeAndRefreshImportedRecords,
   approveSourcePolicy,
   getSourcePolicy,
   getSourceRecords,
   getSourceRuns,
   startSourceRun,
 } from "@/lib/ingestion/client";
-import type { IngestionRun, SourceImportOutcomeCounts, StagedSourceRecord } from "@/lib/ingestion/contracts";
+import type { IngestionRun, SourceImportAcknowledgement, SourceImportOutcomeCounts, StagedSourceRecord } from "@/lib/ingestion/contracts";
 import { importSafeRecords } from "@/lib/ingestion/import-safe";
-import { MASSGIS_ENDPOINT, MASSGIS_FIELDS, validatePolicy, type SourcePolicy } from "@/lib/ingestion/policy";
+import { MASSGIS_ENDPOINT, MASSGIS_FIELDS, syncInitialPolicyFromHydration, validatePolicy, type SourcePolicy } from "@/lib/ingestion/policy";
 import type { ApprovedPolicy } from "@/server/ingestion-store";
 
 function initialPolicy(maximumAssessedValue: number): SourcePolicy {
@@ -67,7 +67,7 @@ function policyApprovalDiff(active: ApprovedPolicy | null, draft: SourcePolicy):
 }
 
 export function SourcesWorkspace() {
-  const { data, updateData, writesSupported } = useLocalData();
+  const { data, hydrated, updateData, writesSupported } = useLocalData();
   const [policy, setPolicy] = useState<SourcePolicy>(() =>
     initialPolicy(data.buyBox.financialThresholds.maximumEstimatedValue),
   );
@@ -77,16 +77,27 @@ export function SourcesWorkspace() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState<"approve" | "run" | "import" | null>(null);
   const policyFormRef = useRef<HTMLFormElement>(null);
+  const policyHydrationState = useRef({ synced: false, edited: false });
 
   const refresh = useCallback(async () => {
     const [storedPolicy, storedRuns, storedRecords] = await Promise.all([
       getSourcePolicy(), getSourceRuns(5), getSourceRecords(),
     ]);
     setActivePolicy(storedPolicy);
-    if (storedPolicy) setPolicy(storedPolicy.policy);
+    if (storedPolicy && !policyHydrationState.current.edited) setPolicy(storedPolicy.policy);
     setRuns(storedRuns);
     setRecords(storedRecords);
   }, []);
+
+  useEffect(() => {
+    const result = syncInitialPolicyFromHydration(
+      policy,
+      data.buyBox.financialThresholds.maximumEstimatedValue,
+      { hydrated, ...policyHydrationState.current },
+    );
+    policyHydrationState.current.synced = result.synced;
+    if (result.policy !== policy) setPolicy(result.policy);
+  }, [data.buyBox.financialThresholds.maximumEstimatedValue, hydrated, policy]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -97,8 +108,11 @@ export function SourcesWorkspace() {
     return () => window.clearTimeout(timer);
   }, [refresh]);
 
-  const safeRecords = useMemo(
-    () => records.filter((record) => record.classification === "safe" && record.importedAt === null),
+  const importableRecords = useMemo(
+    () => records.filter(
+      (record) => (record.classification === "safe" || record.classification === "changed")
+        && record.importedAt === null,
+    ),
     [records],
   );
   const groupedExceptions = useMemo(() => {
@@ -112,6 +126,11 @@ export function SourcesWorkspace() {
   const latest = runs[0] ?? null;
   const approvalDiff = useMemo(() => policyApprovalDiff(activePolicy, policy), [activePolicy, policy]);
 
+  function editPolicy(next: SourcePolicy) {
+    policyHydrationState.current.edited = true;
+    setPolicy(next);
+  }
+
   async function approve() {
     if (!policyFormRef.current?.reportValidity()) return;
     const validated = validatePolicy(policy);
@@ -124,6 +143,7 @@ export function SourcesWorkspace() {
     setMessage("");
     try {
       const approved = await approveSourcePolicy(validated.value);
+      policyHydrationState.current.edited = false;
       setActivePolicy(approved);
       setMessage(`Policy version ${approved.version} approved. Future runs use this exact policy hash.`);
       await refresh();
@@ -151,7 +171,7 @@ export function SourcesWorkspace() {
   async function importAllSafe() {
     setBusy("import");
     setMessage("");
-    let importedIds: string[] = [];
+    let acknowledgements: SourceImportAcknowledgement[] = [];
     let outcomeSummary = "";
     let outcomeCounts: SourceImportOutcomeCounts = {
       applied: 0,
@@ -161,9 +181,12 @@ export function SourcesWorkspace() {
       excluded: 0,
     };
     const mutation = await updateData((current, mutationTime) => {
-      const result = importSafeRecords(current, safeRecords, mutationTime);
+      const result = importSafeRecords(current, importableRecords, mutationTime);
       if (result.error) throw new Error(result.error);
-      importedIds = result.importedRecordIds;
+      acknowledgements = importableRecords.map((record, index) => ({
+        recordId: record.id,
+        outcome: result.outcomes[index],
+      }));
       const count = (outcome: typeof result.outcomes[number]) =>
         result.outcomes.filter((item) => item === outcome).length;
       outcomeCounts = {
@@ -182,9 +205,10 @@ export function SourcesWorkspace() {
       return;
     }
     try {
-      await acknowledgeImportedRecords(importedIds, outcomeCounts);
-      setMessage(`Safe import complete: ${outcomeSummary}.`);
-      await refresh();
+      const completion = await acknowledgeAndRefreshImportedRecords(acknowledgements, refresh);
+      setMessage(completion.refreshed
+        ? `Safe import complete: ${outcomeSummary}.`
+        : `Safe import complete: ${outcomeSummary}. Server acknowledgement succeeded, but source status refresh failed; reload to retry status.`);
     } catch {
       setMessage(`Local import complete: ${outcomeSummary}. Server acknowledgement failed; retry is safe.`);
     } finally {
@@ -222,34 +246,34 @@ export function SourcesWorkspace() {
         >
         <div className="form-grid three">
           <label>Town IDs
-            <input required value={policy.townIds.join(", ")} onChange={(event) => setPolicy({ ...policy, townIds: event.target.value.split(",").map(Number).filter(Number.isInteger) })} />
+            <input required value={policy.townIds.join(", ")} onChange={(event) => editPolicy({ ...policy, townIds: event.target.value.split(",").map(Number).filter(Number.isInteger) })} />
           </label>
           <label>Use codes
-            <input required value={policy.useCodes.join(", ")} onChange={(event) => setPolicy({ ...policy, useCodes: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) })} />
+            <input required value={policy.useCodes.join(", ")} onChange={(event) => editPolicy({ ...policy, useCodes: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) })} />
           </label>
           <label>Unit counts
-            <input required value={policy.unitCounts.join(", ")} onChange={(event) => setPolicy({ ...policy, unitCounts: event.target.value.split(",").map(Number).filter(Number.isInteger) })} />
+            <input required value={policy.unitCounts.join(", ")} onChange={(event) => editPolicy({ ...policy, unitCounts: event.target.value.split(",").map(Number).filter(Number.isInteger) })} />
           </label>
           <label>Maximum assessed value
-            <input type="number" min="0" value={policy.maximumAssessedValue ?? ""} onChange={(event) => setPolicy({ ...policy, maximumAssessedValue: event.target.value ? Number(event.target.value) : null })} />
+            <input type="number" min="0" value={policy.maximumAssessedValue ?? ""} onChange={(event) => editPolicy({ ...policy, maximumAssessedValue: event.target.value ? Number(event.target.value) : null })} />
           </label>
           <label>Maximum year built
-            <input type="number" min="1600" max="2100" value={policy.maximumYearBuilt ?? ""} onChange={(event) => setPolicy({ ...policy, maximumYearBuilt: event.target.value ? Number(event.target.value) : null })} />
+            <input type="number" min="1600" max="2100" value={policy.maximumYearBuilt ?? ""} onChange={(event) => editPolicy({ ...policy, maximumYearBuilt: event.target.value ? Number(event.target.value) : null })} />
           </label>
           <label>Minimum last-sale age (years)
-            <input type="number" min="0" step="1" value={policy.minimumLastSaleAgeYears ?? ""} onChange={(event) => setPolicy({ ...policy, minimumLastSaleAgeYears: event.target.value ? Number(event.target.value) : null })} />
+            <input type="number" min="0" step="1" value={policy.minimumLastSaleAgeYears ?? ""} onChange={(event) => editPolicy({ ...policy, minimumLastSaleAgeYears: event.target.value ? Number(event.target.value) : null })} />
           </label>
           <label>Maximum records per run
-            <input required type="number" min="100" max="100000" value={policy.maxRecordsPerRun} onChange={(event) => setPolicy({ ...policy, maxRecordsPerRun: Number(event.target.value) })} />
+            <input required type="number" min="100" max="100000" value={policy.maxRecordsPerRun} onChange={(event) => editPolicy({ ...policy, maxRecordsPerRun: Number(event.target.value) })} />
           </label>
           <label>Schedule hour (New York)
-            <input type="number" min="0" max="23" value={policy.scheduleHour} onChange={(event) => setPolicy({ ...policy, scheduleHour: Number(event.target.value) })} />
+            <input type="number" min="0" max="23" value={policy.scheduleHour} onChange={(event) => editPolicy({ ...policy, scheduleHour: Number(event.target.value) })} />
           </label>
           <label>Schedule minute
-            <input type="number" min="0" max="59" value={policy.scheduleMinute} onChange={(event) => setPolicy({ ...policy, scheduleMinute: Number(event.target.value) })} />
+            <input type="number" min="0" max="59" value={policy.scheduleMinute} onChange={(event) => editPolicy({ ...policy, scheduleMinute: Number(event.target.value) })} />
           </label>
           <label className="checkbox-row">
-            <input type="checkbox" checked={policy.scheduleEnabled} onChange={(event) => setPolicy({ ...policy, scheduleEnabled: event.target.checked })} />
+            <input type="checkbox" checked={policy.scheduleEnabled} onChange={(event) => editPolicy({ ...policy, scheduleEnabled: event.target.checked })} />
             Daily schedule enabled
           </label>
         </div>
@@ -294,10 +318,10 @@ export function SourcesWorkspace() {
         <article className="panel">
           <div className="panel-heading">
             <div><span className="mini-label">One Web-Locked batch</span><h2>Safe intake</h2></div>
-            <StatusPill tone={safeRecords.length > 0 ? "good" : "neutral"}>{safeRecords.length} pending</StatusPill>
+            <StatusPill tone={importableRecords.length > 0 ? "good" : "neutral"}>{importableRecords.length} pending</StatusPill>
           </div>
-          <p>Only server-classified safe records enter the local Pipeline, always at Research. Exact reruns do not duplicate deals.</p>
-          <button className="button button-primary" type="button" disabled={!writesSupported || safeRecords.length === 0 || busy !== null} onClick={() => void importAllSafe()}>
+          <p>Server-classified safe and changed-source records enter the local Pipeline batch; new properties always start at Research and changed facts stay conflicts. Exact reruns do not duplicate deals.</p>
+          <button className="button button-primary" type="button" disabled={!writesSupported || importableRecords.length === 0 || busy !== null} onClick={() => void importAllSafe()}>
             {busy === "import" ? "Importing…" : "Import all safe records"}
           </button>
         </article>

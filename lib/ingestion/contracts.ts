@@ -41,6 +41,18 @@ export type SourceImportOutcomeCounts = {
   excluded: number;
 };
 
+export type SourceImportOutcome =
+  | "applied"
+  | "exact-reimport"
+  | "changed-source"
+  | "possible-property-match"
+  | "excluded";
+
+export type SourceImportAcknowledgement = {
+  recordId: string;
+  outcome: SourceImportOutcome;
+};
+
 export type AuditEvent = {
   sequence: number;
   id: string;

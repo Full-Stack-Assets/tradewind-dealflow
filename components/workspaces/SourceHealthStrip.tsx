@@ -20,7 +20,10 @@ export function SourceHealthStrip({ surface }: { surface: "pipeline" | "dashboar
         if (!current) return;
         setPolicy(storedPolicy);
         setLatest(runs[0] ?? null);
-        setPending(records.filter((record) => record.classification === "safe" && record.importedAt === null).length);
+        setPending(records.filter(
+          (record) => (record.classification === "safe" || record.classification === "changed")
+            && record.importedAt === null,
+        ).length);
         setExceptions(records.filter((record) => record.classification === "exception").length);
       })
       .catch(() => {
@@ -45,8 +48,8 @@ export function SourceHealthStrip({ surface }: { surface: "pipeline" | "dashboar
         {surface === "pipeline" ? (
           <small>
             {pending === null
-              ? "Safe pending count unavailable. Latest import result unavailable."
-              : `${pending} safe pending import · Latest import result: ${latest
+              ? "Safe/changed pending count unavailable. Latest run import total unavailable."
+              : `${pending} safe/changed pending import · Latest run import total: ${latest
                 ? `${latest.importedCount} acknowledged`
                 : "unavailable"}`}
           </small>

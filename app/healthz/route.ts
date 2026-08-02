@@ -5,7 +5,7 @@ export function GET() {
     {
       status: "ok",
       service: "tradewind-dealflow",
-      release: "massgis-ingestion",
+      release: "acquisitions-os",
       outreach: "disabled",
       ingestion: {
         manual: "enabled",

@@ -1,4 +1,9 @@
-import type { IngestionRun, SourceImportOutcomeCounts, StagedSourceRecord } from "./contracts.ts";
+import type {
+  IngestionRun,
+  SourceImportAcknowledgement,
+  SourceImportOutcomeCounts,
+  StagedSourceRecord,
+} from "./contracts.ts";
 import type { SourcePolicy } from "./policy.ts";
 import type { ApprovedPolicy } from "../../server/ingestion-store.ts";
 
@@ -44,20 +49,42 @@ export async function getSourceRecords(): Promise<StagedSourceRecord[]> {
 }
 
 export async function acknowledgeImportedRecords(
-  recordIds: string[],
-  outcomeCounts: SourceImportOutcomeCounts,
+  items: SourceImportAcknowledgement[],
 ): Promise<number> {
   let acknowledged = 0;
-  for (let offset = 0; offset < recordIds.length; offset += 500) {
-    const snapshot = recordIds.slice(offset, offset + 500);
+  for (let offset = 0; offset < items.length; offset += 500) {
+    const snapshot = items.slice(offset, offset + 500);
+    const outcomeCounts: SourceImportOutcomeCounts = {
+      applied: snapshot.filter(({ outcome }) => outcome === "applied").length,
+      changedSource: snapshot.filter(({ outcome }) => outcome === "changed-source").length,
+      exactReimport: snapshot.filter(({ outcome }) => outcome === "exact-reimport").length,
+      possiblePropertyMatch: snapshot.filter(({ outcome }) => outcome === "possible-property-match").length,
+      excluded: snapshot.filter(({ outcome }) => outcome === "excluded").length,
+    };
+    const recordIds = snapshot
+      .filter(({ outcome }) => outcome === "applied" || outcome === "changed-source" || outcome === "exact-reimport")
+      .map(({ recordId }) => recordId);
     const result = await requestJson<{ acknowledged: number }>("/api/sources/records/imported", {
       method: "POST",
-      body: JSON.stringify({ recordIds: snapshot, outcomeCounts }),
+      body: JSON.stringify({ recordIds, outcomeCounts }),
     });
-    if (result.acknowledged !== snapshot.length) {
+    if (result.acknowledged !== recordIds.length) {
       throw new Error("The server did not acknowledge the complete imported snapshot.");
     }
     acknowledged += result.acknowledged;
   }
   return acknowledged;
+}
+
+export async function acknowledgeAndRefreshImportedRecords(
+  items: SourceImportAcknowledgement[],
+  refresh: () => Promise<void>,
+): Promise<{ acknowledged: number; refreshed: boolean }> {
+  const acknowledged = await acknowledgeImportedRecords(items);
+  try {
+    await refresh();
+    return { acknowledged, refreshed: true };
+  } catch {
+    return { acknowledged, refreshed: false };
+  }
 }

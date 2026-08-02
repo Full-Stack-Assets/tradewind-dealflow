@@ -80,6 +80,8 @@ test("changed source preserves a conflict and exceptions never enter the batch",
   const changed = {
     ...firstRecord,
     id: "record-changed",
+    classification: "changed" as const,
+    reasonCode: "source-conflict",
     normalizedJson: JSON.stringify(changedCandidate),
     normalizedFingerprint: "changed-fingerprint",
   };
@@ -89,4 +91,3 @@ test("changed source preserves a conflict and exceptions never enter the batch",
   assert.equal(result.data.deals.length, 1);
   assert.equal(result.data.deals[0].factConflicts.some((conflict) => conflict.field === "address"), true);
 });
-

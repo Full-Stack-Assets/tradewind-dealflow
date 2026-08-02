@@ -88,3 +88,16 @@ export async function hashPolicy(policy: SourcePolicy): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(canonicalJson(validated.value)));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
+
+export function syncInitialPolicyFromHydration(
+  draft: SourcePolicy,
+  maximumEstimatedValue: number,
+  state: { hydrated: boolean; synced: boolean; edited: boolean },
+): { policy: SourcePolicy; synced: boolean } {
+  if (!state.hydrated || state.synced) return { policy: draft, synced: state.synced };
+  if (state.edited || maximumEstimatedValue <= 0) return { policy: draft, synced: true };
+  return {
+    policy: { ...draft, maximumAssessedValue: maximumEstimatedValue },
+    synced: true,
+  };
+}

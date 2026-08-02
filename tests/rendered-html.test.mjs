@@ -140,7 +140,7 @@ test("pipeline and dashboard render their concise source operating health", asyn
   const pipeline = await (await render("/pipeline")).text();
   const dashboard = await (await render("/dashboard")).text();
 
-  assert.match(pipeline, /Latest import result/i);
+  assert.match(pipeline, /Latest run import total/i);
   assert.match(dashboard, /Next scheduled run/i);
 });
 
@@ -162,14 +162,14 @@ test("dashboard withholds factual output until browser storage is hydrated", asy
   );
 });
 
-test("health endpoint reports the honest MassGIS ingestion release state", async () => {
+test("health endpoint keeps ingestion as an optional product capability", async () => {
   const response = await render("/healthz");
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^application\/json\b/i);
   assert.deepEqual(await response.json(), {
     status: "ok",
     service: "tradewind-dealflow",
-    release: "massgis-ingestion",
+    release: "acquisitions-os",
     outreach: "disabled",
     ingestion: {
       manual: "enabled",

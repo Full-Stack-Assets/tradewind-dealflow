@@ -349,21 +349,21 @@ export async function markRecordsImported(
   outcomeCounts?: SourceImportOutcomeCounts,
 ): Promise<number> {
   const uniqueIds = [...new Set(recordIds)].slice(0, 500);
-  if (uniqueIds.length === 0) return 0;
-  const placeholders = uniqueIds.map(() => "?").join(", ");
-  const recognized = await db.prepare(
-    `SELECT id FROM source_records WHERE classification = 'safe' AND id IN (${placeholders})`,
-  ).bind(...uniqueIds).all<{ id: string }>();
+  if (uniqueIds.length === 0 && !outcomeCounts) return 0;
+  const recognized = uniqueIds.length === 0
+    ? { results: [] as Array<{ id: string }> }
+    : await db.prepare(
+      `SELECT id FROM source_records WHERE classification IN ('safe', 'changed') AND id IN (${uniqueIds.map(() => "?").join(", ")})`,
+    ).bind(...uniqueIds).all<{ id: string }>();
   const recognizedIds = new Set(recognized.results.map(({ id }) => id));
-  const safeIds = uniqueIds.filter((id) => recognizedIds.has(id));
-  if (safeIds.length === 0) return 0;
+  const eligibleIds = uniqueIds.filter((id) => recognizedIds.has(id));
   const timestamp = now.toISOString();
-  const updates = safeIds.flatMap((id) => [
+  const updates = eligibleIds.flatMap((id) => [
     db.prepare(
-      "UPDATE ingestion_runs SET imported_count = imported_count + 1 WHERE id = (SELECT run_id FROM source_records WHERE id = ? AND classification = 'safe' AND imported_at IS NULL)",
+      "UPDATE ingestion_runs SET imported_count = imported_count + 1 WHERE id = (SELECT run_id FROM source_records WHERE id = ? AND classification IN ('safe', 'changed') AND imported_at IS NULL)",
     ).bind(id),
     db.prepare(
-      "UPDATE source_records SET imported_at = COALESCE(imported_at, ?) WHERE id = ? AND classification = 'safe'",
+      "UPDATE source_records SET imported_at = COALESCE(imported_at, ?) WHERE id = ? AND classification IN ('safe', 'changed')",
     ).bind(timestamp, id),
   ]);
   await appendAuditEvent(db, updates, {
@@ -373,7 +373,7 @@ export async function markRecordsImported(
     eventType: "source-records-imported",
     aggregateType: "source-record-batch",
     aggregateId: newId("import"),
-    metadataJson: canonicalJson({ outcomeCounts: outcomeCounts ?? null, recordIds: safeIds }),
+    metadataJson: canonicalJson({ outcomeCounts: outcomeCounts ?? null, recordIds: eligibleIds }),
   });
-  return safeIds.length;
+  return eligibleIds.length;
 }
