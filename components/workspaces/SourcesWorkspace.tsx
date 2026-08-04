@@ -14,7 +14,7 @@ import {
 } from "@/lib/ingestion/client";
 import type { IngestionRun, SourceImportAcknowledgement, SourceImportOutcomeCounts, StagedSourceRecord } from "@/lib/ingestion/contracts";
 import { importSafeRecords } from "@/lib/ingestion/import-safe";
-import { MASSGIS_ENDPOINT, MASSGIS_FIELDS, syncInitialPolicyFromHydration, validatePolicy, type SourcePolicy } from "@/lib/ingestion/policy";
+import { applyStoredPolicyToDraft, MASSGIS_ENDPOINT, MASSGIS_FIELDS, syncInitialPolicyFromHydration, validatePolicy, type SourcePolicy } from "@/lib/ingestion/policy";
 import type { ApprovedPolicy } from "@/server/ingestion-store";
 
 function initialPolicy(maximumAssessedValue: number): SourcePolicy {
@@ -77,14 +77,22 @@ export function SourcesWorkspace() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState<"approve" | "run" | "import" | null>(null);
   const policyFormRef = useRef<HTMLFormElement>(null);
-  const policyHydrationState = useRef({ synced: false, edited: false });
+  const policyHydrationState = useRef({ synced: false, edited: false, storedPolicyLoaded: false });
 
   const refresh = useCallback(async () => {
     const [storedPolicy, storedRuns, storedRecords] = await Promise.all([
       getSourcePolicy(), getSourceRuns(5), getSourceRecords(),
     ]);
     setActivePolicy(storedPolicy);
-    if (storedPolicy && !policyHydrationState.current.edited) setPolicy(storedPolicy.policy);
+    if (storedPolicy) {
+      policyHydrationState.current.storedPolicyLoaded = true;
+      policyHydrationState.current.synced = true;
+      setPolicy((current) => applyStoredPolicyToDraft(
+        current,
+        storedPolicy.policy,
+        policyHydrationState.current.edited,
+      ));
+    }
     setRuns(storedRuns);
     setRecords(storedRecords);
   }, []);

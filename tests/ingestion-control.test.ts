@@ -97,6 +97,50 @@ test("hydration applies the real buy-box ceiling once without overwriting a late
   assert.equal(second.policy.maximumAssessedValue, 500_000);
 });
 
+test("a stored source policy replaces an untouched draft but never an operator edit", () => {
+  const applyStored = (policyModule as unknown as {
+    applyStoredPolicyToDraft?: (
+      draft: SourcePolicy,
+      storedPolicy: SourcePolicy,
+      edited: boolean,
+    ) => SourcePolicy;
+  }).applyStoredPolicyToDraft;
+  assert.equal(typeof applyStored, "function");
+  if (!applyStored) return;
+
+  const draft = validPolicy({ maximumAssessedValue: 750_000 });
+  const stored = validPolicy({ maximumAssessedValue: 325_000 });
+  assert.equal(applyStored(draft, stored, false).maximumAssessedValue, 325_000);
+  assert.equal(applyStored(draft, stored, true).maximumAssessedValue, 750_000);
+});
+
+test("buy-box hydration cannot overwrite a source policy already loaded from storage", () => {
+  const sync = (policyModule as unknown as {
+    syncInitialPolicyFromHydration?: (
+      draft: SourcePolicy,
+      ceiling: number,
+      state: {
+        hydrated: boolean;
+        synced: boolean;
+        edited: boolean;
+        storedPolicyLoaded: boolean;
+      },
+    ) => { policy: SourcePolicy; synced: boolean };
+  }).syncInitialPolicyFromHydration;
+  assert.equal(typeof sync, "function");
+  if (!sync) return;
+
+  const stored = validPolicy({ maximumAssessedValue: 325_000 });
+  const result = sync(stored, 425_000, {
+    hydrated: true,
+    synced: false,
+    edited: false,
+    storedPolicyLoaded: true,
+  });
+  assert.equal(result.policy.maximumAssessedValue, 325_000);
+  assert.equal(result.synced, true);
+});
+
 test("audit event commits the state change and extends the hash chain", async (t) => {
   const db = await createTestD1();
   t.after(() => closeTestD1(db));

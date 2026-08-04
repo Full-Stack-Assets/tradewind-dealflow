@@ -89,11 +89,20 @@ export async function hashPolicy(policy: SourcePolicy): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+export function applyStoredPolicyToDraft(
+  draft: SourcePolicy,
+  storedPolicy: SourcePolicy,
+  edited: boolean,
+): SourcePolicy {
+  return edited ? draft : storedPolicy;
+}
+
 export function syncInitialPolicyFromHydration(
   draft: SourcePolicy,
   maximumEstimatedValue: number,
-  state: { hydrated: boolean; synced: boolean; edited: boolean },
+  state: { hydrated: boolean; synced: boolean; edited: boolean; storedPolicyLoaded?: boolean },
 ): { policy: SourcePolicy; synced: boolean } {
+  if (state.storedPolicyLoaded) return { policy: draft, synced: true };
   if (!state.hydrated || state.synced) return { policy: draft, synced: state.synced };
   if (state.edited || maximumEstimatedValue <= 0) return { policy: draft, synced: true };
   return {
