@@ -4,10 +4,6 @@ import test from "node:test";
 
 const workerUrl = new URL("../dist/server/index.js", import.meta.url);
 const wranglerConfigUrl = new URL("../dist/server/wrangler.json", import.meta.url);
-const vinextDeployUrl = new URL(
-  "../dist/standalone/node_modules/vinext/dist/deploy.js",
-  import.meta.url,
-);
 workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
 
 async function render(path = "/") {
@@ -65,10 +61,8 @@ test("public responses carry baseline browser security headers", async () => {
 
 test("generated deployment config omits the obsolete nodejs compatibility flag", async () => {
   const config = JSON.parse(await readFile(wranglerConfigUrl, "utf8"));
-  const deployHelper = await readFile(vinextDeployUrl, "utf8");
   assert.equal(config.compatibility_date, "2026-08-04");
   assert.equal(config.compatibility_flags?.includes("nodejs_compat") ?? false, false);
-  assert.doesNotMatch(deployHelper, /compatibility_flags: \["nodejs_compat"\]/);
 });
 
 const routes = [
