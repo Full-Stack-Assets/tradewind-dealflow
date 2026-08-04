@@ -227,6 +227,142 @@ export type DealDeskDraft = {
   consentToReview: boolean;
 };
 
+export type SellerWorkspaceDocumentContractStatus =
+  | "Draft"
+  | "Pending review"
+  | "Approved"
+  | "Needs revision"
+  | "Rejected";
+
+export type SellerWorkspaceReviewDraftStatus =
+  | "Draft"
+  | "Ready for approval"
+  | "Needs human update"
+  | "Approved for local export";
+
+export type SellerWorkspaceApprovalRequestStatus =
+  | "Pending"
+  | "Approved"
+  | "Rejected"
+  | "Needs revision";
+
+export type SellerConversationActor = "Seller" | "Operator" | "Team";
+export type SellerConversationChannel =
+  | "Call"
+  | "Text"
+  | "Email"
+  | "Video"
+  | "Meeting"
+  | "In-person";
+
+export type SellerWorkspaceProvenance = {
+  source: string;
+  reference: string;
+  collectedAt: string;
+  confidence: DataConfidence;
+  verifiedAt: string | null;
+  notes: string;
+};
+
+export type SellerConversationLog = {
+  id: string;
+  propertyRecordId: string;
+  loggedAt: string;
+  actor: SellerConversationActor;
+  channel: SellerConversationChannel;
+  summary: string;
+  nextAction: string;
+  followUpAt: string;
+  provenance: SellerWorkspaceProvenance;
+};
+
+export type SellerWorkspaceTask = {
+  id: string;
+  propertyRecordId: string;
+  createdAt: string;
+  updatedAt: string;
+  title: string;
+  status: "todo" | "in_progress" | "done";
+  dueAt: string;
+  notes: string;
+};
+
+export type SellerComparableRange = {
+  id: string;
+  propertyRecordId: string;
+  comparableAddress: string;
+  soldPrice: number | null;
+  soldDate: string;
+  lowEstimate: number | null;
+  highEstimate: number | null;
+  adjustmentNotes: string;
+  provenance: SellerWorkspaceProvenance;
+  updatedAt: string;
+};
+
+export type SellerRepairRange = {
+  id: string;
+  propertyRecordId: string;
+  workItem: string;
+  lowEstimate: number | null;
+  highEstimate: number | null;
+  evidenceSummary: string;
+  provenance: SellerWorkspaceProvenance;
+  updatedAt: string;
+};
+
+export type SellerDocumentContract = {
+  id: string;
+  propertyRecordId: string;
+  title: string;
+  category: "Comparable packet" | "Repair analysis" | "Conversation packet" | "Property fact sheet" | "Other";
+  storageMode: "metadata-only";
+  fileName: string;
+  mimeType: string;
+  fileSizeBytes: number;
+  notes: string;
+  status: SellerWorkspaceDocumentContractStatus;
+  provenance: SellerWorkspaceProvenance;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SellerReviewDraft = {
+  id: string;
+  propertyRecordId: string;
+  title: string;
+  summary: string;
+  includeComparableRangeIds: string[];
+  includeRepairRangeIds: string[];
+  includeDocumentIds: string[];
+  status: SellerWorkspaceReviewDraftStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SellerApprovalRequest = {
+  id: string;
+  propertyRecordId: string;
+  reviewDraftId: string;
+  requestType: "Document publish" | "Range publish" | "Fact-sheet export";
+  requestedAt: string;
+  requestedBy: string;
+  status: SellerWorkspaceApprovalRequestStatus;
+  reviewedAt: string | null;
+  reviewer: string;
+  reason: string;
+};
+
+export type SellerPropertyWorkspace = {
+  conversationLogs: SellerConversationLog[];
+  tasks: SellerWorkspaceTask[];
+  comparableRanges: SellerComparableRange[];
+  repairRanges: SellerRepairRange[];
+  documents: SellerDocumentContract[];
+  reviewDrafts: SellerReviewDraft[];
+  approvalRequests: SellerApprovalRequest[];
+};
+
 export type DealFlowData = {
   schemaVersion: 2;
   revision: number;
@@ -244,6 +380,7 @@ export type DealFlowData = {
   readinessChecks: Record<string, boolean>;
   compliance: ComplianceState;
   dealDeskDraft: DealDeskDraft;
+  sellerPropertyWorkspace: SellerPropertyWorkspace;
 };
 
 export type MarketingReadinessInput = {

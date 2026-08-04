@@ -71,6 +71,7 @@ const routes = [
   ["/pipeline", /Pipeline/i, /Your pipeline is empty/i],
   ["/sources", /MassGIS standing policy/i, /Import all safe records/i],
   ["/buyers", /Buyer workspace/i, /No buyer profiles yet/i],
+  ["/seller-property", /Seller\/Property Workspace/i, /Drafts unpublished/i],
   ["/academy", /Academy/i, /12 learning modules/i],
   ["/compliance", /Compliance workspace/i, /January 1, 2027/i],
   ["/resources", /Resource center/i, /Last reviewed: July 27, 2026/i],

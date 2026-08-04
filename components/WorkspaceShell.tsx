@@ -13,6 +13,7 @@ const navigation = [
   { href: "/pipeline", label: "Pipeline", glyph: "↗" },
   { href: "/sources", label: "Sources", glyph: "◫" },
   { href: "/buyers", label: "Buyers", glyph: "◎" },
+  { href: "/seller-property", label: "Seller/Property", glyph: "◉" },
   { href: "/academy", label: "Academy", glyph: "▤" },
   { href: "/compliance", label: "Compliance", glyph: "✓" },
   { href: "/resources", label: "Resources", glyph: "⌘" },

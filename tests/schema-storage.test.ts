@@ -238,6 +238,175 @@ test("v2 validation strips no unknown data and rejects it instead", () => {
   });
 });
 
+test("v2 validation accepts a fully linked seller/property workspace slice", () => {
+  const candidate = createEmptyData("2026-07-27T12:00:00.000Z");
+  candidate.deals.push({
+    id: "seller-workspace-prop",
+    createdAt: "2026-07-27T12:00:00.000Z",
+    updatedAt: "2026-07-27T12:00:00.000Z",
+    state: "MA",
+    address: "12 Harbor Way",
+    city: "Boston",
+    zip: "02110",
+    market: "Boston",
+    propertyType: "Single-family",
+    source: "Municipal assessor",
+    ownerContactStatus: "Not researched",
+    stage: "Research",
+    nextAction: "Draft proof packet",
+    notes: "",
+    askingPrice: 310000,
+    rehabLevel: "Light",
+    sourceAssertions: [],
+    factConflicts: [],
+    researchRestrictions: [],
+    strategies: ["Assignment"],
+    executedAgreement: false,
+    equitableInterestRecorded: false,
+    legalTitleDisclosureReady: false,
+    attorneyReviewComplete: false,
+  });
+
+  candidate.sellerPropertyWorkspace.conversationLogs.push({
+    id: "conv-1",
+    propertyRecordId: "seller-workspace-prop",
+    loggedAt: "2026-07-27T12:00:00.000Z",
+    actor: "Seller",
+    channel: "Call",
+    summary: "Owner prefers walk-through before offers.",
+    nextAction: "Request utility bills",
+    followUpAt: "2026-07-27T12:30:00.000Z",
+    provenance: {
+      source: "manual-call-note",
+      reference: "operator-runbook entry",
+      collectedAt: "2026-07-27T11:55:00.000Z",
+      confidence: "High",
+      verifiedAt: null,
+      notes: "Captured in operator notes.",
+    },
+  });
+
+  candidate.sellerPropertyWorkspace.tasks.push({
+    id: "task-1",
+    propertyRecordId: "seller-workspace-prop",
+    createdAt: "2026-07-27T12:00:00.000Z",
+    updatedAt: "2026-07-27T12:00:00.000Z",
+    title: "Set comparables",
+    status: "todo",
+    dueAt: "2026-07-28T00:00:00.000Z",
+    notes: "Draft all comparable packets first.",
+  });
+
+  candidate.sellerPropertyWorkspace.comparableRanges.push({
+    id: "comp-1",
+    propertyRecordId: "seller-workspace-prop",
+    comparableAddress: "10 Harbor Street",
+    soldPrice: 325000,
+    soldDate: "2026-07-20T00:00:00.000Z",
+    lowEstimate: 280000,
+    highEstimate: 335000,
+    adjustmentNotes: "Nearby renovations and pool removal.",
+    provenance: {
+      source: "manual-research",
+      reference: "manual comps folder",
+      collectedAt: "2026-07-27T10:00:00.000Z",
+      confidence: "Medium",
+      verifiedAt: null,
+      notes: "Comparable checked against assessor data.",
+    },
+    updatedAt: "2026-07-27T12:00:00.000Z",
+  });
+
+  candidate.sellerPropertyWorkspace.repairRanges.push({
+    id: "repair-1",
+    propertyRecordId: "seller-workspace-prop",
+    workItem: "Roof",
+    lowEstimate: 8000,
+    highEstimate: 12000,
+    evidenceSummary: "Visible wear on ridge line in attached photos.",
+    provenance: {
+      source: "operator-walkthrough",
+      reference: "operator inspection notes",
+      collectedAt: "2026-07-27T09:45:00.000Z",
+      confidence: "Medium",
+      verifiedAt: null,
+      notes: "Inspection limited to visible surfaces.",
+    },
+    updatedAt: "2026-07-27T12:00:00.000Z",
+  });
+
+  candidate.sellerPropertyWorkspace.documents.push({
+    id: "doc-1",
+    propertyRecordId: "seller-workspace-prop",
+    title: "Comparable packet",
+    category: "Comparable packet",
+    storageMode: "metadata-only",
+    fileName: "comps.pdf",
+    mimeType: "application/pdf",
+    fileSizeBytes: 1200,
+    notes: "No file upload, metadata only.",
+    status: "Draft",
+    provenance: {
+      source: "manual-upload",
+      reference: "operator packet",
+      collectedAt: "2026-07-27T08:15:00.000Z",
+      confidence: "High",
+      verifiedAt: null,
+      notes: "Metadata draft only.",
+    },
+    createdAt: "2026-07-27T08:15:00.000Z",
+    updatedAt: "2026-07-27T08:15:00.000Z",
+  });
+
+  candidate.sellerPropertyWorkspace.reviewDrafts.push({
+    id: "draft-1",
+    propertyRecordId: "seller-workspace-prop",
+    title: "Property package draft",
+    summary: "Prelim facts and ranges for approval.",
+    includeComparableRangeIds: ["comp-1"],
+    includeRepairRangeIds: ["repair-1"],
+    includeDocumentIds: ["doc-1"],
+    status: "Draft",
+    createdAt: "2026-07-27T12:15:00.000Z",
+    updatedAt: "2026-07-27T12:15:00.000Z",
+  });
+
+  candidate.sellerPropertyWorkspace.approvalRequests.push({
+    id: "approval-1",
+    propertyRecordId: "seller-workspace-prop",
+    reviewDraftId: "draft-1",
+    requestType: "Document publish",
+    requestedAt: "2026-07-27T12:20:00.000Z",
+    requestedBy: "operator",
+    status: "Pending",
+    reviewedAt: null,
+    reviewer: "operator",
+    reason: "Need internal review before use in seller packet.",
+  });
+
+  const result = validateImport(candidate);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.data.sellerPropertyWorkspace.reviewDrafts[0]?.status, "Draft");
+  assert.equal(result.data.sellerPropertyWorkspace.approvalRequests[0]?.requestType, "Document publish");
+  assert.equal(result.data.sellerPropertyWorkspace.conversationLogs[0]?.actor, "Seller");
+});
+
+test("v2 validation rejects seller/property workspace entries that reference missing property data", () => {
+  const candidate = createEmptyData("2026-07-27T12:00:00.000Z");
+  candidate.sellerPropertyWorkspace.tasks.push({
+    id: "bad-task",
+    propertyRecordId: "missing-property",
+    createdAt: "2026-07-27T12:00:00.000Z",
+    updatedAt: "2026-07-27T12:00:00.000Z",
+    title: "Orphan task",
+    status: "todo",
+    dueAt: "2026-07-28T00:00:00.000Z",
+    notes: "Should fail",
+  });
+  assert.equal(validateImport(candidate).ok, false);
+});
+
 test("v2 validation rejects contact holds that are not represented by an active structured restriction", () => {
   for (const ownerContactStatus of [
     "Owner opted out",

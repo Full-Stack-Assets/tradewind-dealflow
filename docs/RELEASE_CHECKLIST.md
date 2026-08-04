@@ -19,7 +19,7 @@ Historical access-policy baseline: custom, owner-only access with one allowed
 user and no allowed groups; policy revision 1. Reconfirm it and do not broaden
 access during this release.
 
-Candidate verification time/operator: 2026-08-03, Codex local verification.
+Candidate verification time/operator: 2026-08-04, Codex local verification.
 
 Evidence below is checked only where the local source, automated suite, browser
 smoke test, repository state, or Sites release state proved the claim.
@@ -47,12 +47,12 @@ smoke test, repository state, or Sites release state proved the claim.
 
 ## Automated gate
 
-- [x] `npm run test:unit` — 197 passed, 0 failed.
+- [x] `npm run test:unit` — 199 passed, 0 failed.
 - [x] `npm run typecheck` — passed with no TypeScript errors.
 - [x] `npm run lint` — passed with 0 errors and 3 existing unused-variable
       warnings in `server/ingestion-runner.ts`.
 - [x] `npm run build` — passed; standalone output generated.
-- [x] `npm run test:render` — 19 passed, 0 failed.
+- [x] `npm run test:render` — 20 passed, 0 failed.
 - [x] `git diff --check` — clean.
 - [x] Fresh `npm audit --omit=dev` registry query — 0 production
       vulnerabilities.
@@ -90,7 +90,9 @@ smoke test, repository state, or Sites release state proved the claim.
       servers private and track compatible upstream patches.
 - [x] Runtime starts from the exact final local production output.
 - [ ] Production `/`, `/dashboard`, `/sources`, `/pipeline`, `/compliance`, and `/healthz`
-      return successfully.
+      return successfully for authenticated owner access.
+- [ ] Authenticated-owner production `/`, `/dashboard`, `/sources`, `/pipeline`, `/compliance`, and `/healthz`
+      return successfully (unauthenticated smoke returns 401 from private access policy).
 - [ ] Current production browser console and errors-only worker logs contain no
       unexpected errors or personal data.
 

@@ -6,12 +6,26 @@ import type {
   DataConfidence,
   DealAnalysis,
   DealDeskDraft,
+  SellerWorkspaceProvenance,
+  SellerComparableRange,
+  SellerConversationChannel,
+  SellerConversationLog,
+  SellerConversationActor,
+  SellerDocumentContract,
+  SellerPropertyWorkspace,
+  SellerRepairRange,
+  SellerReviewDraft,
+  SellerApprovalRequest,
+  SellerWorkspaceTask,
   DealFlowData,
   DealRecord,
   DealStrategy,
   FactConflict,
   ParticipationPath,
   PipelineStage,
+  SellerWorkspaceDocumentContractStatus,
+  SellerWorkspaceReviewDraftStatus,
+  SellerWorkspaceApprovalRequestStatus,
   ProofOfFundsStatus,
   PropertyFactSnapshot,
   RehabLevel,
@@ -43,6 +57,28 @@ const SOURCE_USAGE_CLASSIFICATIONS: SourceUsageClassification[] = [
   "Public record", "Licensed provider", "Direct submission", "Authorized CRM",
   "Operator research", "Restricted — research only",
 ];
+const SELLER_CONVERSATION_ACTORS: SellerConversationActor[] = ["Seller", "Operator", "Team"];
+const SELLER_CONVERSATION_CHANNELS: SellerConversationChannel[] = [
+  "Call", "Text", "Email", "Video", "Meeting", "In-person",
+];
+const SELLER_TASK_STATUSES = ["todo", "in_progress", "done"] as const;
+const SELLER_DOCUMENT_STATUSES: SellerWorkspaceDocumentContractStatus[] = [
+  "Draft", "Pending review", "Approved", "Needs revision", "Rejected",
+];
+const SELLER_REVIEW_DRAFT_STATUSES: SellerWorkspaceReviewDraftStatus[] = [
+  "Draft", "Ready for approval", "Needs human update", "Approved for local export",
+];
+const SELLER_APPROVAL_STATUSES: SellerWorkspaceApprovalRequestStatus[] = [
+  "Pending", "Approved", "Rejected", "Needs revision",
+];
+const SELLER_REQUEST_TYPES = ["Document publish", "Range publish", "Fact-sheet export"] as const;
+const SELLER_DOCUMENT_CATEGORIES = [
+  "Comparable packet",
+  "Repair analysis",
+  "Conversation packet",
+  "Property fact sheet",
+  "Other",
+] as const;
 const DATA_CONFIDENCES: DataConfidence[] = ["Low", "Medium", "High"];
 const STATES_FOR_IMPORT: StateCode[] = ["MA", "RI"];
 const RESTRICTION_CODES: ResearchRestrictionCode[] = [
@@ -96,6 +132,7 @@ type DealRecordV1 = Omit<DealRecord, "zip" | "market" | "sourceAssertions" | "fa
 type DealFlowDataV1 = Omit<DealFlowData, "schemaVersion" | "revision" | "buyBox" | "deals"> & {
   schemaVersion: 1;
   deals: DealRecordV1[];
+  sellerPropertyWorkspace?: SellerPropertyWorkspace;
 };
 
 export type ImportResult =
@@ -118,6 +155,15 @@ export function createEmptyData(now = new Date().toISOString()): DealFlowData {
     dealDeskDraft: {
       dealId: "", submitterName: "", submitterEmail: "", summary: "",
       requestedStructure: "", qualificationChecks: {}, consentToReview: false,
+    },
+    sellerPropertyWorkspace: {
+      conversationLogs: [],
+      tasks: [],
+      comparableRanges: [],
+      repairRanges: [],
+      documents: [],
+      reviewDrafts: [],
+      approvalRequests: [],
     },
   };
 }
@@ -142,8 +188,45 @@ function trimmed(value: string): string {
   return value.trim();
 }
 
+function reconstructSellerWorkspaceProvenance(raw: unknown): SellerWorkspaceProvenance | null {
+  if (!isRecord(raw) || !hasOnlyKeys(raw, ["source", "reference", "collectedAt", "confidence", "verifiedAt", "notes"])) return null;
+  if (!validString(raw.source) || !validString(raw.reference) || !validString(raw.collectedAt) || !validIsoTimestamp(raw.collectedAt) || !validConfidence(raw.confidence) || (raw.verifiedAt !== null && raw.verifiedAt !== undefined && !validSourceTimestamp(raw.verifiedAt, new Date())) || !validString(raw.notes)) return null;
+  return {
+    source: trimmed(raw.source),
+    reference: trimmed(raw.reference),
+    collectedAt: raw.collectedAt,
+    confidence: raw.confidence,
+    verifiedAt: raw.verifiedAt ?? null,
+    notes: trimmed(raw.notes),
+  };
+}
+
 function validArray(value: unknown): value is unknown[] {
   return Array.isArray(value) && value.length <= MAX_ARRAY_LENGTH;
+}
+function validSellerConversationActor(value: unknown): value is SellerConversationActor {
+  return SELLER_CONVERSATION_ACTORS.includes(value as SellerConversationActor);
+}
+function validSellerConversationChannel(value: unknown): value is SellerConversationChannel {
+  return SELLER_CONVERSATION_CHANNELS.includes(value as SellerConversationChannel);
+}
+function validSellerTaskStatus(value: unknown): value is SellerWorkspaceTask["status"] {
+  return SELLER_TASK_STATUSES.includes(value as SellerWorkspaceTask["status"]);
+}
+function validSellerDocumentCategory(value: unknown): value is SellerDocumentContract["category"] {
+  return SELLER_DOCUMENT_CATEGORIES.includes(value as SellerDocumentContract["category"]);
+}
+function validSellerDocumentStatus(value: unknown): value is SellerWorkspaceDocumentContractStatus {
+  return SELLER_DOCUMENT_STATUSES.includes(value as SellerWorkspaceDocumentContractStatus);
+}
+function validSellerReviewDraftStatus(value: unknown): value is SellerWorkspaceReviewDraftStatus {
+  return SELLER_REVIEW_DRAFT_STATUSES.includes(value as SellerWorkspaceReviewDraftStatus);
+}
+function validSellerApprovalStatus(value: unknown): value is SellerWorkspaceApprovalRequestStatus {
+  return SELLER_APPROVAL_STATUSES.includes(value as SellerWorkspaceApprovalRequestStatus);
+}
+function validSellerApprovalRequestType(value: unknown): value is SellerApprovalRequest["requestType"] {
+  return SELLER_REQUEST_TYPES.includes(value as SellerApprovalRequest["requestType"]);
 }
 
 function validState(value: unknown): value is StateCode { return value === "MA" || value === "RI"; }
@@ -343,6 +426,186 @@ function reconstructDealDeskDraft(raw: unknown): DealDeskDraft | null {
   return qualificationChecks === null ? null : { dealId: raw.dealId, submitterName: trimmed(raw.submitterName), submitterEmail: trimmed(raw.submitterEmail), summary: trimmed(raw.summary), requestedStructure: trimmed(raw.requestedStructure), qualificationChecks, consentToReview: raw.consentToReview };
 }
 
+function reconstructSellerConversationLog(raw: unknown): SellerConversationLog | null {
+  const fields = [
+    "id", "propertyRecordId", "loggedAt", "actor", "channel",
+    "summary", "nextAction", "followUpAt", "provenance",
+  ];
+  if (!isRecord(raw) || !hasOnlyKeys(raw, fields) || !validString(raw.id) || !validString(raw.propertyRecordId) || !validSourceTimestamp(raw.loggedAt, new Date()) || !validSellerConversationActor(raw.actor) || !validSellerConversationChannel(raw.channel) || !validString(raw.summary) || !validString(raw.nextAction) || !validSourceTimestamp(raw.followUpAt, new Date())) return null;
+  const provenance = reconstructSellerWorkspaceProvenance(raw.provenance);
+  if (provenance === null) return null;
+  return {
+    id: raw.id, propertyRecordId: raw.propertyRecordId, loggedAt: raw.loggedAt,
+    actor: raw.actor, channel: raw.channel, summary: trimmed(raw.summary),
+    nextAction: trimmed(raw.nextAction), followUpAt: raw.followUpAt,
+    provenance,
+  };
+}
+
+function reconstructSellerTask(raw: unknown): SellerWorkspaceTask | null {
+  const fields = ["id", "propertyRecordId", "createdAt", "updatedAt", "title", "status", "dueAt", "notes"];
+  if (!isRecord(raw) || !hasOnlyKeys(raw, fields) || !validString(raw.id) || !validString(raw.propertyRecordId) || !validString(raw.createdAt) || !validSourceTimestamp(raw.updatedAt, new Date()) || !validString(raw.title) || !validSellerTaskStatus(raw.status) || !validString(raw.dueAt) || !validString(raw.notes)) return null;
+  return {
+    id: raw.id,
+    propertyRecordId: raw.propertyRecordId,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+    title: trimmed(raw.title),
+    status: raw.status,
+    dueAt: raw.dueAt,
+    notes: trimmed(raw.notes),
+  };
+}
+
+function reconstructSellerComparableRange(raw: unknown): SellerComparableRange | null {
+  const fields = [
+    "id", "propertyRecordId", "comparableAddress", "soldPrice", "soldDate",
+    "lowEstimate", "highEstimate", "adjustmentNotes", "provenance", "updatedAt",
+  ];
+  if (!isRecord(raw) || !hasOnlyKeys(raw, fields) || !validString(raw.id) || !validString(raw.propertyRecordId) || !validString(raw.comparableAddress) || !validSourceTimestamp(raw.soldDate, new Date()) || !validNullableNonnegativeNumber(raw.soldPrice) || !validNullableNonnegativeNumber(raw.lowEstimate) || !validNullableNonnegativeNumber(raw.highEstimate) || !validString(raw.adjustmentNotes) || !validSourceTimestamp(raw.updatedAt, new Date())) return null;
+  if (raw.lowEstimate !== null && raw.highEstimate !== null && raw.lowEstimate > raw.highEstimate) return null;
+  const provenance = reconstructSellerWorkspaceProvenance(raw.provenance);
+  if (provenance === null) return null;
+  return {
+    id: raw.id,
+    propertyRecordId: raw.propertyRecordId,
+    comparableAddress: trimmed(raw.comparableAddress),
+    soldPrice: raw.soldPrice,
+    soldDate: raw.soldDate,
+    lowEstimate: raw.lowEstimate,
+    highEstimate: raw.highEstimate,
+    adjustmentNotes: trimmed(raw.adjustmentNotes),
+    provenance,
+    updatedAt: raw.updatedAt,
+  };
+}
+
+function reconstructSellerRepairRange(raw: unknown): SellerRepairRange | null {
+  const fields = [
+    "id", "propertyRecordId", "workItem", "lowEstimate", "highEstimate",
+    "evidenceSummary", "provenance", "updatedAt",
+  ];
+  if (!isRecord(raw) || !hasOnlyKeys(raw, fields) || !validString(raw.id) || !validString(raw.propertyRecordId) || !validString(raw.workItem) || !validString(raw.evidenceSummary) || !validSourceTimestamp(raw.updatedAt, new Date()) || !validNullableNonnegativeNumber(raw.lowEstimate) || !validNullableNonnegativeNumber(raw.highEstimate)) return null;
+  if (raw.lowEstimate !== null && raw.highEstimate !== null && raw.lowEstimate > raw.highEstimate) return null;
+  const provenance = reconstructSellerWorkspaceProvenance(raw.provenance);
+  if (provenance === null) return null;
+  return {
+    id: raw.id,
+    propertyRecordId: raw.propertyRecordId,
+    workItem: trimmed(raw.workItem),
+    lowEstimate: raw.lowEstimate,
+    highEstimate: raw.highEstimate,
+    evidenceSummary: trimmed(raw.evidenceSummary),
+    provenance,
+    updatedAt: raw.updatedAt,
+  };
+}
+
+function reconstructSellerDocumentContract(raw: unknown): SellerDocumentContract | null {
+  const fields = [
+    "id", "propertyRecordId", "title", "category", "storageMode", "fileName",
+    "mimeType", "fileSizeBytes", "notes", "status", "provenance", "createdAt", "updatedAt",
+  ];
+  if (!isRecord(raw) || !hasOnlyKeys(raw, fields) || !validString(raw.id) || !validString(raw.propertyRecordId) || !validString(raw.title) || !validSellerDocumentCategory(raw.category) || raw.storageMode !== "metadata-only" || !validString(raw.fileName) || !validString(raw.mimeType) || !validNonnegativeInteger(raw.fileSizeBytes) || !validString(raw.notes) || !validSellerDocumentStatus(raw.status) || !validSourceTimestamp(raw.createdAt, new Date()) || !validSourceTimestamp(raw.updatedAt, new Date())) return null;
+  const provenance = reconstructSellerWorkspaceProvenance(raw.provenance);
+  if (provenance === null) return null;
+  return {
+    id: raw.id,
+    propertyRecordId: raw.propertyRecordId,
+    title: trimmed(raw.title),
+    category: raw.category,
+    storageMode: "metadata-only",
+    fileName: trimmed(raw.fileName),
+    mimeType: trimmed(raw.mimeType),
+    fileSizeBytes: raw.fileSizeBytes,
+    notes: trimmed(raw.notes),
+    status: raw.status,
+    provenance,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+  };
+}
+
+function reconstructSellerReviewDraft(raw: unknown): SellerReviewDraft | null {
+  const fields = [
+    "id", "propertyRecordId", "title", "summary", "includeComparableRangeIds", "includeRepairRangeIds", "includeDocumentIds", "status", "createdAt", "updatedAt",
+  ];
+  if (!isRecord(raw) || !hasOnlyKeys(raw, fields)) return null;
+  const includeComparableRangeIds = reconstructStringArray(raw.includeComparableRangeIds);
+  const includeRepairRangeIds = reconstructStringArray(raw.includeRepairRangeIds);
+  const includeDocumentIds = reconstructStringArray(raw.includeDocumentIds);
+  if (!validString(raw.id) || !validString(raw.propertyRecordId) || !validString(raw.title) || !validString(raw.summary) || includeComparableRangeIds === null || includeRepairRangeIds === null || includeDocumentIds === null || !validSellerReviewDraftStatus(raw.status) || !validSourceTimestamp(raw.createdAt, new Date()) || !validSourceTimestamp(raw.updatedAt, new Date())) return null;
+  return {
+    id: raw.id,
+    propertyRecordId: raw.propertyRecordId,
+    title: trimmed(raw.title),
+    summary: trimmed(raw.summary),
+    includeComparableRangeIds,
+    includeRepairRangeIds,
+    includeDocumentIds,
+    status: raw.status,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+  };
+}
+
+function reconstructSellerApprovalRequest(raw: unknown): SellerApprovalRequest | null {
+  const fields = [
+    "id", "propertyRecordId", "reviewDraftId", "requestType", "requestedAt", "requestedBy", "status", "reviewedAt", "reviewer", "reason",
+  ];
+  if (!isRecord(raw) || !hasOnlyKeys(raw, fields) || !validString(raw.id) || !validString(raw.propertyRecordId) || !validString(raw.reviewDraftId) || !validSellerApprovalRequestType(raw.requestType) || !validSourceTimestamp(raw.requestedAt, new Date()) || !validString(raw.requestedBy) || !validSellerApprovalStatus(raw.status) || !validString(raw.reviewer) || !validString(raw.reason)) return null;
+  if (raw.reviewedAt !== null && !validSourceTimestamp(raw.reviewedAt, new Date())) return null;
+  return {
+    id: raw.id,
+    propertyRecordId: raw.propertyRecordId,
+    reviewDraftId: raw.reviewDraftId,
+    requestType: raw.requestType,
+    requestedAt: raw.requestedAt,
+    requestedBy: trimmed(raw.requestedBy),
+    status: raw.status,
+    reviewedAt: raw.reviewedAt ?? null,
+    reviewer: trimmed(raw.reviewer),
+    reason: trimmed(raw.reason),
+  };
+}
+
+function reconstructSellerPropertyWorkspace(raw: unknown): SellerPropertyWorkspace | null {
+  const fields = [
+    "conversationLogs", "tasks", "comparableRanges", "repairRanges", "documents", "reviewDrafts", "approvalRequests",
+  ];
+  if (!isRecord(raw) || !hasOnlyKeys(raw, fields) || !validArray(raw.conversationLogs) || !validArray(raw.tasks) || !validArray(raw.comparableRanges) || !validArray(raw.repairRanges) || !validArray(raw.documents) || !validArray(raw.reviewDrafts) || !validArray(raw.approvalRequests)) return null;
+
+  const conversationLogs = raw.conversationLogs.map(reconstructSellerConversationLog);
+  const tasks = raw.tasks.map(reconstructSellerTask);
+  const comparableRanges = raw.comparableRanges.map(reconstructSellerComparableRange);
+  const repairRanges = raw.repairRanges.map(reconstructSellerRepairRange);
+  const documents = raw.documents.map(reconstructSellerDocumentContract);
+  const reviewDrafts = raw.reviewDrafts.map(reconstructSellerReviewDraft);
+  const approvalRequests = raw.approvalRequests.map(reconstructSellerApprovalRequest);
+
+  if (
+    conversationLogs.some((item) => item === null)
+    || tasks.some((item) => item === null)
+    || comparableRanges.some((item) => item === null)
+    || repairRanges.some((item) => item === null)
+    || documents.some((item) => item === null)
+    || reviewDrafts.some((item) => item === null)
+    || approvalRequests.some((item) => item === null)
+  ) {
+    return null;
+  }
+
+  return {
+    conversationLogs: conversationLogs as SellerConversationLog[],
+    tasks: tasks as SellerWorkspaceTask[],
+    comparableRanges: comparableRanges as SellerComparableRange[],
+    repairRanges: repairRanges as SellerRepairRange[],
+    documents: documents as SellerDocumentContract[],
+    reviewDrafts: reviewDrafts as SellerReviewDraft[],
+    approvalRequests: approvalRequests as SellerApprovalRequest[],
+  };
+}
+
 function reconstructBuyBox(raw: unknown): BuyBoxConfig | null {
   const fields = ["configured", "version", "updatedAt", "states", "markets", "marketsByState", "propertyTypes", "minPrice", "maxPrice", "rehabLevels", "minimumConfidence", "maxVerificationAgeDays", "financialThresholds", "weights"];
   if (!isRecord(raw) || !hasOnlyKeys(raw, fields) || typeof raw.configured !== "boolean" || !validNonnegativeInteger(raw.version) || !validIsoTimestamp(raw.updatedAt) || !validArray(raw.states) || !raw.states.every(validState) || !validNullableNonnegativeNumber(raw.minPrice) || !validNullableNonnegativeNumber(raw.maxPrice) || !validArray(raw.rehabLevels) || !raw.rehabLevels.every(validRehab) || !validConfidence(raw.minimumConfidence) || !validNonnegativeInteger(raw.maxVerificationAgeDays) || !isRecord(raw.weights)) return null;
@@ -497,6 +760,41 @@ function relationshipsAreValid(data: DealFlowData): boolean {
     if (deal.factConflicts.some((conflict) => !assertionIds.has(conflict.sourceAssertionId))) return false;
     if (deal.researchRestrictions.some((restriction) => restriction.sourceAssertionId !== null && !assertionIds.has(restriction.sourceAssertionId))) return false;
   }
+  const comparableIds = new Set(data.sellerPropertyWorkspace.comparableRanges.map((entry) => entry.id));
+  const repairIds = new Set(data.sellerPropertyWorkspace.repairRanges.map((entry) => entry.id));
+  const documentIds = new Set(data.sellerPropertyWorkspace.documents.map((entry) => entry.id));
+  const reviewDraftIds = new Set(data.sellerPropertyWorkspace.reviewDrafts.map((draft) => draft.id));
+  if (
+    !uniqueIds(data.sellerPropertyWorkspace.conversationLogs)
+    || !uniqueIds(data.sellerPropertyWorkspace.tasks)
+    || !uniqueIds(data.sellerPropertyWorkspace.comparableRanges)
+    || !uniqueIds(data.sellerPropertyWorkspace.repairRanges)
+    || !uniqueIds(data.sellerPropertyWorkspace.documents)
+    || !uniqueIds(data.sellerPropertyWorkspace.reviewDrafts)
+    || !uniqueIds(data.sellerPropertyWorkspace.approvalRequests)
+  ) return false;
+  if (data.sellerPropertyWorkspace.conversationLogs.some((entry) => !dealIds.has(entry.propertyRecordId))) return false;
+  if (data.sellerPropertyWorkspace.tasks.some((task) => !dealIds.has(task.propertyRecordId))) return false;
+  if (data.sellerPropertyWorkspace.comparableRanges.some((entry) => !dealIds.has(entry.propertyRecordId))) return false;
+  if (data.sellerPropertyWorkspace.repairRanges.some((entry) => !dealIds.has(entry.propertyRecordId))) return false;
+  if (data.sellerPropertyWorkspace.documents.some((entry) => !dealIds.has(entry.propertyRecordId))) return false;
+  if (data.sellerPropertyWorkspace.reviewDrafts.some((draft) => !dealIds.has(draft.propertyRecordId))) return false;
+  if (data.sellerPropertyWorkspace.approvalRequests.some((request) => !reviewDraftIds.has(request.reviewDraftId) || !dealIds.has(request.propertyRecordId))) return false;
+  for (const draft of data.sellerPropertyWorkspace.reviewDrafts) {
+    if (draft.includeComparableRangeIds.some((id) => !comparableIds.has(id))) return false;
+    if (draft.includeRepairRangeIds.some((id) => !repairIds.has(id))) return false;
+    if (draft.includeDocumentIds.some((id) => !documentIds.has(id))) return false;
+    const propertyRecordId = draft.propertyRecordId;
+    if (draft.includeComparableRangeIds.some((id) =>
+      data.sellerPropertyWorkspace.comparableRanges.find((entry) => entry.id === id)?.propertyRecordId !== propertyRecordId
+    )) return false;
+    if (draft.includeRepairRangeIds.some((id) =>
+      data.sellerPropertyWorkspace.repairRanges.find((entry) => entry.id === id)?.propertyRecordId !== propertyRecordId
+    )) return false;
+    if (draft.includeDocumentIds.some((id) =>
+      data.sellerPropertyWorkspace.documents.find((entry) => entry.id === id)?.propertyRecordId !== propertyRecordId
+    )) return false;
+  }
   return true;
 }
 
@@ -513,7 +811,20 @@ function reconstructV1(value: Record<string, unknown>): DealFlowDataV1 | null {
   const compliance = reconstructCompliance(value.compliance);
   const dealDeskDraft = reconstructDealDeskDraft(value.dealDeskDraft);
   if (preferences === null || deals.some((item) => item === null) || buyers.some((item) => item === null) || analyses.some((item) => item === null) || curriculum === null || weekProgress === null || readinessChecks === null || compliance === null || dealDeskDraft === null) return null;
-  const result: DealFlowDataV1 = { schemaVersion: 1, updatedAt: value.updatedAt, preferences, deals: deals as DealRecordV1[], buyers: buyers as BuyerRecord[], analyses: analyses as DealAnalysis[], curriculum, weekProgress, readinessChecks, compliance, dealDeskDraft };
+  const result: DealFlowDataV1 = {
+    schemaVersion: 1,
+    updatedAt: value.updatedAt,
+    preferences,
+    deals: deals as DealRecordV1[],
+    buyers: buyers as BuyerRecord[],
+    analyses: analyses as DealAnalysis[],
+    curriculum,
+    weekProgress,
+    readinessChecks,
+    compliance,
+    dealDeskDraft,
+    sellerPropertyWorkspace: createEmptyData(value.updatedAt).sellerPropertyWorkspace,
+  };
   const ids = new Set(result.deals.map((deal) => deal.id));
   return uniqueIds(result.deals) && uniqueIds(result.buyers) && uniqueIds(result.analyses) && result.analyses.every((analysis) => analysis.dealId === null || ids.has(analysis.dealId)) && (result.dealDeskDraft.dealId === "" || ids.has(result.dealDeskDraft.dealId)) ? result : null;
 }
@@ -557,6 +868,7 @@ export function migrateV1(value: DealFlowDataV1, now: Date): DealFlowData {
     buyBox: createEmptyData(now.toISOString()).buyBox, deals: migratedDeals, buyers: value.buyers,
     analyses: value.analyses, curriculum: value.curriculum, weekProgress: value.weekProgress,
     readinessChecks: value.readinessChecks, compliance: value.compliance, dealDeskDraft: value.dealDeskDraft,
+    sellerPropertyWorkspace: value.sellerPropertyWorkspace ?? createEmptyData(now.toISOString()).sellerPropertyWorkspace,
   };
 }
 
@@ -564,7 +876,7 @@ function reconstructV2(
   value: Record<string, unknown>,
   now: Date,
 ): DealFlowData | null {
-  const fields = ["schemaVersion", "revision", "updatedAt", "preferences", "buyBox", "deals", "buyers", "analyses", "curriculum", "weekProgress", "readinessChecks", "compliance", "dealDeskDraft"];
+  const fields = ["schemaVersion", "revision", "updatedAt", "preferences", "buyBox", "deals", "buyers", "analyses", "curriculum", "weekProgress", "readinessChecks", "compliance", "dealDeskDraft", "sellerPropertyWorkspace"];
   if (!hasOnlyKeys(value, fields) || value.schemaVersion !== 2 || !validNonnegativeInteger(value.revision) || !validString(value.updatedAt) || !validArray(value.deals) || !validArray(value.buyers) || !validArray(value.analyses)) return null;
   const preferences = reconstructPreferences(value.preferences);
   const buyBox = reconstructBuyBox(value.buyBox);
@@ -576,15 +888,31 @@ function reconstructV2(
   const readinessChecks = reconstructBooleanRecord(value.readinessChecks);
   const compliance = reconstructCompliance(value.compliance);
   const dealDeskDraft = reconstructDealDeskDraft(value.dealDeskDraft);
-  if (preferences === null || buyBox === null || deals.some((item) => item === null) || buyers.some((item) => item === null) || analyses.some((item) => item === null) || curriculum === null || weekProgress === null || readinessChecks === null || compliance === null || dealDeskDraft === null) return null;
-  const data: DealFlowData = { schemaVersion: 2, revision: value.revision, updatedAt: value.updatedAt, preferences, buyBox, deals: deals as DealRecord[], buyers: buyers as BuyerRecord[], analyses: analyses as DealAnalysis[], curriculum, weekProgress, readinessChecks, compliance, dealDeskDraft };
+  const sellerPropertyWorkspace = reconstructSellerPropertyWorkspace(value.sellerPropertyWorkspace);
+  if (preferences === null || buyBox === null || deals.some((item) => item === null) || buyers.some((item) => item === null) || analyses.some((item) => item === null) || curriculum === null || weekProgress === null || readinessChecks === null || compliance === null || dealDeskDraft === null || sellerPropertyWorkspace === null) return null;
+  const data: DealFlowData = {
+    schemaVersion: 2,
+    revision: value.revision,
+    updatedAt: value.updatedAt,
+    preferences,
+    buyBox,
+    deals: deals as DealRecord[],
+    buyers: buyers as BuyerRecord[],
+    analyses: analyses as DealAnalysis[],
+    curriculum,
+    weekProgress,
+    readinessChecks,
+    compliance,
+    dealDeskDraft,
+    sellerPropertyWorkspace,
+  };
   return relationshipsAreValid(data) ? data : null;
 }
 
 export function validateImport(value: unknown, now = new Date()): ImportResult {
   if (!isRecord(value)) return { ok: false, errors: ["The selected file does not contain a data object."] };
   const v1TopLevel = ["schemaVersion", "updatedAt", "preferences", "deals", "buyers", "analyses", "curriculum", "weekProgress", "readinessChecks", "compliance", "dealDeskDraft"];
-  const v2TopLevel = ["schemaVersion", "revision", "updatedAt", "preferences", "buyBox", "deals", "buyers", "analyses", "curriculum", "weekProgress", "readinessChecks", "compliance", "dealDeskDraft"];
+  const v2TopLevel = ["schemaVersion", "revision", "updatedAt", "preferences", "buyBox", "deals", "buyers", "analyses", "curriculum", "weekProgress", "readinessChecks", "compliance", "dealDeskDraft", "sellerPropertyWorkspace"];
   const allowed = value.schemaVersion === 1 ? v1TopLevel : value.schemaVersion === 2 ? v2TopLevel : v2TopLevel;
   const extras = unsupportedKeys(value, allowed);
   if (extras.length > 0) return { ok: false, errors: [`The workspace contains unsupported top-level fields: ${extras.join(", ")}.`] };
