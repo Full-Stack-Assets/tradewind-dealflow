@@ -1,23 +1,40 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 
 import { Miniflare } from "miniflare";
+import type { D1Database } from "../../server/d1.ts";
 
 const instances = new WeakMap<object, Miniflare>();
 
-export async function createTestD1() {
+async function migrationNames(): Promise<string[]> {
+  const migrationsDirectory = new URL("../../drizzle/", import.meta.url);
+  return (await readdir(migrationsDirectory))
+    .filter((name) => /^\d+.*\.sql$/.test(name))
+    .sort();
+}
+
+export async function applyTestD1Migrations(
+  db: D1Database,
+  options: { fromMigration?: number; throughMigration?: number } = {},
+): Promise<void> {
+  const migrationsDirectory = new URL("../../drizzle/", import.meta.url);
+  for (const name of await migrationNames()) {
+    const ordinal = Number(/^\d+/.exec(name)?.[0]);
+    if (ordinal < (options.fromMigration ?? 0) || ordinal > (options.throughMigration ?? Infinity)) continue;
+    const migration = await readFile(new URL(name, migrationsDirectory), "utf8");
+    for (const statement of migration.split("--> statement-breakpoint")) {
+      if (statement.trim()) await db.prepare(statement).run();
+    }
+  }
+}
+
+export async function createTestD1(options: { throughMigration?: number } = {}) {
   const miniflare = new Miniflare({
     modules: true,
     script: "export default { fetch() { return new Response('ok'); } };",
     d1Databases: ["DB"],
   });
   const db = await miniflare.getD1Database("DB");
-  const migration = await readFile(
-    new URL("../../drizzle/0000_massgis_ingestion.sql", import.meta.url),
-    "utf8",
-  );
-  for (const statement of migration.split("--> statement-breakpoint")) {
-    if (statement.trim()) await db.prepare(statement).run();
-  }
+  await applyTestD1Migrations(db, { throughMigration: options.throughMigration });
   instances.set(db, miniflare);
   return db;
 }

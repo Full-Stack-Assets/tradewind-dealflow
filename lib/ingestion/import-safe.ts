@@ -5,15 +5,10 @@ import {
   type LeadImportCandidate,
 } from "../lead-ingestion.ts";
 import type { DealFlowData } from "../types.ts";
-import type { StagedSourceRecord } from "./contracts.ts";
+import type { SourceImportOutcome, StagedSourceRecord } from "./contracts.ts";
 import type { MassGisCandidate } from "./massgis.ts";
 
-export type SafeImportOutcome =
-  | "applied"
-  | "exact-reimport"
-  | "changed-source"
-  | "possible-property-match"
-  | "excluded";
+export type SafeImportOutcome = SourceImportOutcome;
 
 export type SafeImportResult = {
   data: DealFlowData;
@@ -23,7 +18,10 @@ export type SafeImportResult = {
 };
 
 function candidateFromRecord(record: StagedSourceRecord): LeadImportCandidate | null {
-  if (record.classification !== "safe" || record.importedAt !== null) return null;
+  if (
+    (record.classification !== "safe" && record.classification !== "changed")
+    || record.importedAt !== null
+  ) return null;
   let value: MassGisCandidate;
   try {
     value = JSON.parse(record.normalizedJson) as MassGisCandidate;
@@ -104,4 +102,3 @@ export function importSafeRecords(
   });
   return { data: applied.data, outcomes, importedRecordIds, error: null };
 }
-

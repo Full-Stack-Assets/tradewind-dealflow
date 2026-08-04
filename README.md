@@ -94,7 +94,7 @@ commit promotion, and private production health verification are tracked in
 | `/pipeline` | Buy-box configuration, local CSV preview/apply, provenance review, and backup |
 | `/sources` | MassGIS policy approval, manual/scheduled runs, safe intake, exceptions, and audit |
 | `/compliance` | Educational state lanes and planning-only controls |
-| `/healthz` | Declares the MassGIS-ingestion release and disabled outreach state |
+| `/healthz` | Declares the acquisitions OS release, optional ingestion capability, and disabled outreach state |
 
 Other existing routes are outside the fast-track Milestone 1 acceptance scope.
 

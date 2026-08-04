@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+const wranglerConfigUrl = new URL("../dist/server/wrangler.json", import.meta.url);
 workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
 
 async function render(path = "/") {
@@ -55,6 +57,12 @@ test("public responses carry baseline browser security headers", async () => {
     response.headers.get("permissions-policy") ?? "",
     /camera=\(\)/,
   );
+});
+
+test("generated deployment config omits the obsolete nodejs compatibility flag", async () => {
+  const config = JSON.parse(await readFile(wranglerConfigUrl, "utf8"));
+  assert.equal(config.compatibility_date, "2026-08-04");
+  assert.equal(config.compatibility_flags?.includes("nodejs_compat") ?? false, false);
 });
 
 const routes = [
@@ -125,12 +133,23 @@ test("sources renders bounded approval, scheduling, intake, and audit without ou
   const html = await response.text();
 
   assert.match(html, /MassGIS Property Tax Parcels/i);
+  assert.match(html, /Approval diff/i);
+  assert.match(html, /Minimum last-sale age/i);
   assert.match(html, /Run now/i);
   assert.match(html, /Latest source run counts/i);
   assert.match(html, /Grouped, not per-record approval/i);
   assert.match(html, /Import all safe records/i);
   assert.match(html, /Download audit/i);
+  assert.doesNotMatch(html, /MassGIS ingestion release/i);
   assert.doesNotMatch(html, /Send campaign|Text owner|Email owner|Autodial|OWNER1|OWN_ADDR/i);
+});
+
+test("pipeline and dashboard render their concise source operating health", async () => {
+  const pipeline = await (await render("/pipeline")).text();
+  const dashboard = await (await render("/dashboard")).text();
+
+  assert.match(pipeline, /Latest run import total/i);
+  assert.match(dashboard, /Next scheduled run/i);
 });
 
 test("dashboard withholds factual output until browser storage is hydrated", async () => {
@@ -151,14 +170,14 @@ test("dashboard withholds factual output until browser storage is hydrated", asy
   );
 });
 
-test("health endpoint reports the honest MassGIS ingestion release state", async () => {
+test("health endpoint keeps ingestion as an optional product capability", async () => {
   const response = await render("/healthz");
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^application\/json\b/i);
   assert.deepEqual(await response.json(), {
     status: "ok",
     service: "tradewind-dealflow",
-    release: "massgis-ingestion",
+    release: "acquisitions-os",
     outreach: "disabled",
     ingestion: {
       manual: "enabled",

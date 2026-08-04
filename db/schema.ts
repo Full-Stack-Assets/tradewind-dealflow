@@ -36,6 +36,9 @@ export const ingestionRuns = sqliteTable("ingestion_runs", {
   lastErrorCode: text("last_error_code"),
 }, (table) => [
   uniqueIndex("ingestion_runs_idempotency_key_unique").on(table.idempotencyKey),
+  uniqueIndex("ingestion_runs_one_active_per_policy")
+    .on(table.policyId)
+    .where(sql`${table.status} IN ('queued', 'running')`),
   index("ingestion_runs_policy_id_idx").on(table.policyId),
 ]);
 

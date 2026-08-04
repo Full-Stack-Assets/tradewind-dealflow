@@ -3,21 +3,27 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
-import { getSourceRecords, getSourceRuns } from "@/lib/ingestion/client";
+import { getSourcePolicy, getSourceRecords, getSourceRuns } from "@/lib/ingestion/client";
 import type { IngestionRun } from "@/lib/ingestion/contracts";
+import type { ApprovedPolicy } from "@/server/ingestion-store";
 
 export function SourceHealthStrip({ surface }: { surface: "pipeline" | "dashboard" }) {
   const [latest, setLatest] = useState<IngestionRun | null>(null);
   const [pending, setPending] = useState<number | null>(null);
   const [exceptions, setExceptions] = useState<number | null>(null);
+  const [policy, setPolicy] = useState<ApprovedPolicy | null>(null);
 
   useEffect(() => {
     let current = true;
-    void Promise.all([getSourceRuns(1), getSourceRecords()])
-      .then(([runs, records]) => {
+    void Promise.all([getSourcePolicy(), getSourceRuns(1), getSourceRecords()])
+      .then(([storedPolicy, runs, records]) => {
         if (!current) return;
+        setPolicy(storedPolicy);
         setLatest(runs[0] ?? null);
-        setPending(records.filter((record) => record.classification === "safe" && record.importedAt === null).length);
+        setPending(records.filter(
+          (record) => (record.classification === "safe" || record.classification === "changed")
+            && record.importedAt === null,
+        ).length);
         setExceptions(records.filter((record) => record.classification === "exception").length);
       })
       .catch(() => {
@@ -25,6 +31,7 @@ export function SourceHealthStrip({ surface }: { surface: "pipeline" | "dashboar
         setLatest(null);
         setPending(null);
         setExceptions(null);
+        setPolicy(null);
       });
     return () => { current = false; };
   }, []);
@@ -38,11 +45,25 @@ export function SourceHealthStrip({ surface }: { surface: "pipeline" | "dashboar
             ? `Last run ${latest.status} · ${latest.retrievedCount} retrieved`
             : "Source status becomes available after the control plane responds"}
         </strong>
-        <small>
-          {pending === null || exceptions === null
-            ? "No lead or exception count is inferred."
-            : `${pending} safe pending import · ${exceptions} exceptions`}
-        </small>
+        {surface === "pipeline" ? (
+          <small>
+            {pending === null
+              ? "Safe/changed pending count unavailable. Latest run import total unavailable."
+              : `${pending} safe/changed pending import · Latest run import total: ${latest
+                ? `${latest.importedCount} acknowledged`
+                : "unavailable"}`}
+          </small>
+        ) : (
+          <small>
+            {exceptions === null
+              ? "Exception count unavailable. Next scheduled run unavailable."
+              : `${exceptions} exceptions · Next scheduled run: ${policy?.nextRunAt
+                ? new Date(policy.nextRunAt).toLocaleString()
+                : policy?.policy.scheduleEnabled
+                  ? `daily ${String(policy.policy.scheduleHour).padStart(2, "0")}:${String(policy.policy.scheduleMinute).padStart(2, "0")} ${policy.policy.scheduleTimeZone}`
+                  : "disabled"}`}
+          </small>
+        )}
       </div>
       <Link className="button button-quiet button-small" href="/sources">
         {surface === "pipeline" ? "Import staged records" : "Open Sources"}

@@ -1,5 +1,5 @@
 import { appendAuditEvent } from "../lib/ingestion/audit.ts";
-import type { IngestionRun, StagedSourceRecord } from "../lib/ingestion/contracts.ts";
+import type { IngestionRun, SourceImportOutcomeCounts, StagedSourceRecord } from "../lib/ingestion/contracts.ts";
 import type { MassGisCandidate, MassGisRecordRejection } from "../lib/ingestion/massgis.ts";
 import { canonicalJson, hashPolicy, validatePolicy, type SourcePolicy } from "../lib/ingestion/policy.ts";
 import type { D1Database, D1PreparedStatement } from "./d1.ts";
@@ -206,15 +206,29 @@ export async function createRun(
   const insert = db.prepare(
     "INSERT INTO ingestion_runs (id, policy_id, policy_hash, trigger, status, idempotency_key, requested_at, started_at) VALUES (?, ?, ?, ?, 'running', ?, ?, ?)",
   ).bind(id, policy.id, policy.policyHash, trigger, idempotencyKey, timestamp, timestamp);
-  await appendAuditEvent(db, insert, {
-    id: newId("audit"),
-    occurredAt: timestamp,
-    actorId,
-    eventType: "ingestion-run-started",
-    aggregateType: "ingestion-run",
-    aggregateId: id,
-    metadataJson: canonicalJson({ policyHash: policy.policyHash, trigger }),
-  });
+  try {
+    await appendAuditEvent(db, insert, {
+      id: newId("audit"),
+      occurredAt: timestamp,
+      actorId,
+      eventType: "ingestion-run-started",
+      aggregateType: "ingestion-run",
+      aggregateId: id,
+      metadataJson: canonicalJson({ policyHash: policy.policyHash, trigger }),
+    });
+  } catch (error) {
+    const idempotent = await getRunByIdempotencyKey(db, idempotencyKey);
+    if (idempotent) return { run: idempotent, existing: true };
+    const admitted = await db.prepare(
+      "SELECT id FROM ingestion_runs WHERE policy_id = ? AND status IN ('queued', 'running') LIMIT 1",
+    ).bind(policy.id).first<{ id: string }>();
+    if (admitted) throw new Error("an ingestion run is already in progress");
+    const active = await getActivePolicy(db);
+    if (!active || active.id !== policy.id || active.policyHash !== policy.policyHash) {
+      throw new Error("approved policy is no longer active");
+    }
+    throw error;
+  }
   const run = await getRun(db, id);
   if (!run) throw new Error("ingestion run was not persisted");
   return { run, existing: false };
@@ -223,6 +237,7 @@ export async function createRun(
 export async function persistPage(
   db: D1Database,
   runId: string,
+  pageOrdinal: number,
   records: MassGisCandidate[],
   rejections: MassGisRecordRejection[],
   actorId: string,
@@ -259,11 +274,11 @@ export async function persistPage(
   for (let index = 0; index < rejections.length; index += 1) {
     const rejection = rejections[index];
     const json = canonicalJson(rejection);
-    const fingerprint = await digest(`${runId}:${index}:${json}`);
+    const fingerprint = await digest(`${runId}:${pageOrdinal}:${index}:${json}`);
     statements.push(db.prepare(
       "INSERT INTO source_records (id, run_id, source_identity, source_record_id, retrieved_at, raw_json, normalized_json, raw_fingerprint, normalized_fingerprint, classification, reason_code, imported_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'exception', 'invalid-record', NULL)",
     ).bind(
-      newId("record"), runId, `massgis-rejection:${runId}:${index}:${fingerprint}`,
+      newId("record"), runId, `massgis-rejection:${runId}:${pageOrdinal}:${index}:${fingerprint}`,
       rejection.sourceRecordId ?? "", now.toISOString(), "{}", json, fingerprint, fingerprint,
     ));
   }
@@ -331,16 +346,24 @@ export async function markRecordsImported(
   recordIds: string[],
   actorId: string,
   now = new Date(),
+  outcomeCounts?: SourceImportOutcomeCounts,
 ): Promise<number> {
-  const uniqueIds = [...new Set(recordIds)].slice(0, 10_000);
-  if (uniqueIds.length === 0) return 0;
+  const uniqueIds = [...new Set(recordIds)].slice(0, 500);
+  if (uniqueIds.length === 0 && !outcomeCounts) return 0;
+  const recognized = uniqueIds.length === 0
+    ? { results: [] as Array<{ id: string }> }
+    : await db.prepare(
+      `SELECT id FROM source_records WHERE classification IN ('safe', 'changed') AND id IN (${uniqueIds.map(() => "?").join(", ")})`,
+    ).bind(...uniqueIds).all<{ id: string }>();
+  const recognizedIds = new Set(recognized.results.map(({ id }) => id));
+  const eligibleIds = uniqueIds.filter((id) => recognizedIds.has(id));
   const timestamp = now.toISOString();
-  const updates = uniqueIds.flatMap((id) => [
+  const updates = eligibleIds.flatMap((id) => [
     db.prepare(
-      "UPDATE ingestion_runs SET imported_count = imported_count + 1 WHERE id = (SELECT run_id FROM source_records WHERE id = ? AND classification = 'safe' AND imported_at IS NULL)",
+      "UPDATE ingestion_runs SET imported_count = imported_count + 1 WHERE id = (SELECT run_id FROM source_records WHERE id = ? AND classification IN ('safe', 'changed') AND imported_at IS NULL)",
     ).bind(id),
     db.prepare(
-      "UPDATE source_records SET imported_at = COALESCE(imported_at, ?) WHERE id = ? AND classification = 'safe'",
+      "UPDATE source_records SET imported_at = COALESCE(imported_at, ?) WHERE id = ? AND classification IN ('safe', 'changed')",
     ).bind(timestamp, id),
   ]);
   await appendAuditEvent(db, updates, {
@@ -350,7 +373,7 @@ export async function markRecordsImported(
     eventType: "source-records-imported",
     aggregateType: "source-record-batch",
     aggregateId: newId("import"),
-    metadataJson: canonicalJson({ recordIds: uniqueIds }),
+    metadataJson: canonicalJson({ outcomeCounts: outcomeCounts ?? null, recordIds: eligibleIds }),
   });
-  return uniqueIds.length;
+  return eligibleIds.length;
 }

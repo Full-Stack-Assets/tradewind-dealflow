@@ -1,4 +1,5 @@
 import { canonicalJson, type SourcePolicy } from "../lib/ingestion/policy.ts";
+import type { SourceImportOutcomeCounts } from "../lib/ingestion/contracts.ts";
 import type { D1Bindings } from "./d1.ts";
 import {
   approvePolicy,
@@ -51,12 +52,31 @@ function asObject(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
+function importOutcomeCounts(value: unknown): SourceImportOutcomeCounts {
+  const counts = asObject(value);
+  const expected = ["applied", "changedSource", "exactReimport", "possiblePropertyMatch", "excluded"] as const;
+  if (
+    Object.keys(counts).length !== expected.length
+    || expected.some((key) => !Number.isInteger(counts[key]) || Number(counts[key]) < 0)
+  ) {
+    throw new Error("outcomeCounts must contain non-negative integer import outcomes");
+  }
+  return counts as SourceImportOutcomeCounts;
+}
+
+function isSameOrigin(request: Request, url: URL): boolean {
+  const origin = request.headers.get("origin");
+  if (origin && origin !== url.origin) return false;
+  return request.headers.get("sec-fetch-site") !== "cross-site";
+}
+
 export async function handleIngestionApi(
   request: Request,
   env: D1Bindings,
 ): Promise<Response | null> {
   const url = new URL(request.url);
   if (!url.pathname.startsWith("/api/sources/")) return null;
+  if (!isSameOrigin(request, url)) return json({ error: "same-origin request required" }, 403);
   const actor = await actorId(request);
   if (!actor) return json({ error: "authenticated user required" }, 401);
 
@@ -102,7 +122,15 @@ export async function handleIngestionApi(
       if (!Array.isArray(body.recordIds) || body.recordIds.some((id) => typeof id !== "string")) {
         return json({ error: "recordIds must be an array of strings" }, 400);
       }
-      return json({ acknowledged: await markRecordsImported(env.DB, body.recordIds, actor) });
+      return json({
+        acknowledged: await markRecordsImported(
+          env.DB,
+          body.recordIds,
+          actor,
+          new Date(),
+          importOutcomeCounts(body.outcomeCounts),
+        ),
+      });
     }
     if (request.method === "GET" && url.pathname === "/api/sources/audit") {
       const result = await env.DB.prepare(
@@ -124,4 +152,3 @@ export async function handleIngestionApi(
     return json({ error: message }, status);
   }
 }
-

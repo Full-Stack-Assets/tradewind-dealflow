@@ -8,6 +8,8 @@ import {
   type SourcePolicy,
   validatePolicy,
 } from "../lib/ingestion/policy.ts";
+import * as policyModule from "../lib/ingestion/policy.ts";
+import { approvePolicy, createRun, markRecordsImported } from "../server/ingestion-store.ts";
 import { closeTestD1, createTestD1, tableNames } from "./helpers/d1.ts";
 
 function validPolicy(overrides: Partial<SourcePolicy> = {}): SourcePolicy {
@@ -68,6 +70,77 @@ test("policy enforces the configured numeric bounds", () => {
   assert.equal(validatePolicy(validPolicy({ maxRecordsPerRun: 99 })).ok, false);
 });
 
+test("hydration applies the real buy-box ceiling once without overwriting a later edit", () => {
+  const sync = (policyModule as unknown as {
+    syncInitialPolicyFromHydration?: (
+      draft: SourcePolicy,
+      ceiling: number,
+      state: { hydrated: boolean; synced: boolean; edited: boolean },
+    ) => { policy: SourcePolicy; synced: boolean };
+  }).syncInitialPolicyFromHydration;
+  assert.equal(typeof sync, "function");
+  if (!sync) return;
+
+  const first = sync(validPolicy({ maximumAssessedValue: 750_000 }), 425_000, {
+    hydrated: true,
+    synced: false,
+    edited: false,
+  });
+  assert.equal(first.policy.maximumAssessedValue, 425_000);
+  assert.equal(first.synced, true);
+
+  const second = sync({ ...first.policy, maximumAssessedValue: 500_000 }, 300_000, {
+    hydrated: true,
+    synced: first.synced,
+    edited: true,
+  });
+  assert.equal(second.policy.maximumAssessedValue, 500_000);
+});
+
+test("a stored source policy replaces an untouched draft but never an operator edit", () => {
+  const applyStored = (policyModule as unknown as {
+    applyStoredPolicyToDraft?: (
+      draft: SourcePolicy,
+      storedPolicy: SourcePolicy,
+      edited: boolean,
+    ) => SourcePolicy;
+  }).applyStoredPolicyToDraft;
+  assert.equal(typeof applyStored, "function");
+  if (!applyStored) return;
+
+  const draft = validPolicy({ maximumAssessedValue: 750_000 });
+  const stored = validPolicy({ maximumAssessedValue: 325_000 });
+  assert.equal(applyStored(draft, stored, false).maximumAssessedValue, 325_000);
+  assert.equal(applyStored(draft, stored, true).maximumAssessedValue, 750_000);
+});
+
+test("buy-box hydration cannot overwrite a source policy already loaded from storage", () => {
+  const sync = (policyModule as unknown as {
+    syncInitialPolicyFromHydration?: (
+      draft: SourcePolicy,
+      ceiling: number,
+      state: {
+        hydrated: boolean;
+        synced: boolean;
+        edited: boolean;
+        storedPolicyLoaded: boolean;
+      },
+    ) => { policy: SourcePolicy; synced: boolean };
+  }).syncInitialPolicyFromHydration;
+  assert.equal(typeof sync, "function");
+  if (!sync) return;
+
+  const stored = validPolicy({ maximumAssessedValue: 325_000 });
+  const result = sync(stored, 425_000, {
+    hydrated: true,
+    synced: false,
+    edited: false,
+    storedPolicyLoaded: true,
+  });
+  assert.equal(result.policy.maximumAssessedValue, 325_000);
+  assert.equal(result.synced, true);
+});
+
 test("audit event commits the state change and extends the hash chain", async (t) => {
   const db = await createTestD1();
   t.after(() => closeTestD1(db));
@@ -105,4 +178,69 @@ test("audit event commits the state change and extends the hash chain", async (t
     { ...event, id: "event-2", eventType: "policy.scheduled" },
   );
   assert.equal(second.previousHash, first.eventHash);
+});
+
+test("import acknowledgement counts only eligible safe or changed records and audits outcomes", async (t) => {
+  const db = await createTestD1();
+  t.after(() => closeTestD1(db));
+  const now = new Date("2026-07-29T12:00:00.000Z");
+  const policy = await approvePolicy(db, validPolicy(), "actor", now);
+  const { run } = await createRun(db, policy, "operator", "ack-run", "actor", now);
+  await db.batch([
+    db.prepare(
+      "INSERT INTO source_records (id, run_id, source_identity, source_record_id, retrieved_at, raw_json, normalized_json, raw_fingerprint, normalized_fingerprint, classification, reason_code, imported_at) VALUES (?, ?, ?, ?, ?, '{}', '{}', ?, ?, 'safe', NULL, NULL)",
+    ).bind("record-safe", run.id, "safe-identity", "safe-source", now.toISOString(), "raw-safe", "normalized-safe"),
+    db.prepare(
+      "INSERT INTO source_records (id, run_id, source_identity, source_record_id, retrieved_at, raw_json, normalized_json, raw_fingerprint, normalized_fingerprint, classification, reason_code, imported_at) VALUES (?, ?, ?, ?, ?, '{}', '{}', ?, ?, 'changed', 'source-conflict', NULL)",
+    ).bind("record-changed", run.id, "changed-identity", "changed-source", now.toISOString(), "raw-changed", "normalized-changed"),
+    db.prepare(
+      "INSERT INTO source_records (id, run_id, source_identity, source_record_id, retrieved_at, raw_json, normalized_json, raw_fingerprint, normalized_fingerprint, classification, reason_code, imported_at) VALUES (?, ?, ?, ?, ?, '{}', '{}', ?, ?, 'exception', 'invalid-record', NULL)",
+    ).bind("record-exception", run.id, "exception-identity", "exception-source", now.toISOString(), "raw-exception", "normalized-exception"),
+  ]);
+  const outcomeCounts = {
+    applied: 1,
+    changedSource: 1,
+    exactReimport: 0,
+    possiblePropertyMatch: 0,
+    excluded: 2,
+  };
+
+  const acknowledged = await markRecordsImported(
+    db,
+    ["record-safe", "record-changed", "record-exception", "record-missing"],
+    "actor",
+    now,
+    outcomeCounts,
+  );
+
+  assert.equal(acknowledged, 2);
+  assert.equal(
+    (await db.prepare("SELECT imported_count FROM ingestion_runs WHERE id = ?").bind(run.id).first<{ imported_count: number }>())?.imported_count,
+    2,
+  );
+  const event = await db.prepare(
+    "SELECT metadata_json FROM audit_events WHERE event_type = 'source-records-imported'",
+  ).first<{ metadata_json: string }>();
+  assert.deepEqual(JSON.parse(event?.metadata_json ?? "null"), {
+    outcomeCounts,
+    recordIds: ["record-safe", "record-changed"],
+  });
+});
+
+test("an outcome-only acknowledgement chunk is preserved in the audit chain", async (t) => {
+  const db = await createTestD1();
+  t.after(() => closeTestD1(db));
+  const outcomeCounts = {
+    applied: 0,
+    changedSource: 0,
+    exactReimport: 0,
+    possiblePropertyMatch: 1,
+    excluded: 1,
+  };
+
+  assert.equal(await markRecordsImported(db, [], "actor", new Date("2026-07-29T12:00:00.000Z"), outcomeCounts), 0);
+  const event = await db.prepare(
+    "SELECT metadata_json FROM audit_events WHERE event_type = 'source-records-imported'",
+  ).first<{ metadata_json: string }>();
+  assert.deepEqual(JSON.parse(event?.metadata_json ?? "null"), { outcomeCounts, recordIds: [] });
 });
