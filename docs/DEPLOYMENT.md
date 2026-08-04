@@ -1,6 +1,6 @@
 # Setup and Deployment
 
-Release mode: MassGIS ingestion lead engine
+Release mode: Tradewind acquisitions OS with optional MassGIS ingestion
 
 Hosting target: the existing private OpenAI Sites project
 
@@ -44,7 +44,7 @@ alone is not a production release.
 {
   "status": "ok",
   "service": "tradewind-dealflow",
-  "release": "massgis-ingestion",
+  "release": "acquisitions-os",
   "outreach": "disabled",
   "ingestion": {
     "manual": "enabled",

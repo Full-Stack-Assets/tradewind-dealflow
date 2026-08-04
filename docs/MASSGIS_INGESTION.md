@@ -1,6 +1,6 @@
 # MassGIS Ingestion Operations
 
-Release: `massgis-ingestion`
+Release: `acquisitions-os` (MassGIS ingestion capability)
 
 ## What the integration does
 
