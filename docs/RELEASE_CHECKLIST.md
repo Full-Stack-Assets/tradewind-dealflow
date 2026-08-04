@@ -52,7 +52,7 @@ smoke test, repository state, or Sites release state proved the claim.
 - [x] `npm run lint` — passed with 0 errors and 3 existing unused-variable
       warnings in `server/ingestion-runner.ts`.
 - [x] `npm run build` — passed; standalone output generated.
-- [x] `npm run test:render` — 18 passed, 0 failed.
+- [x] `npm run test:render` — 19 passed, 0 failed.
 - [x] `git diff --check` — clean.
 - [x] Fresh `npm audit --omit=dev` registry query — 0 production
       vulnerabilities.

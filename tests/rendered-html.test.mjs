@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const workerUrl = new URL("../dist/server/index.js", import.meta.url);
+const wranglerConfigUrl = new URL("../dist/server/wrangler.json", import.meta.url);
 workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
 
 async function render(path = "/") {
@@ -55,6 +57,12 @@ test("public responses carry baseline browser security headers", async () => {
     response.headers.get("permissions-policy") ?? "",
     /camera=\(\)/,
   );
+});
+
+test("generated deployment config omits the obsolete nodejs compatibility flag", async () => {
+  const config = JSON.parse(await readFile(wranglerConfigUrl, "utf8"));
+  assert.equal(config.compatibility_date, "2026-08-04");
+  assert.equal(config.compatibility_flags?.includes("nodejs_compat") ?? false, false);
 });
 
 const routes = [
