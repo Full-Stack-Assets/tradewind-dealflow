@@ -106,16 +106,17 @@ access.
 
 - Deployment status: succeeded on 2026-08-06.
 - Production URL: `https://tradewind-dealflow.blaizexb.chatgpt.site`.
-- Deployed source SHA: `3083b87f2bccd2d1f477706c813a600e79ad7a4c`.
-- Saved Sites version: `10` (`appgprj_6a681e7c21f4819182043900ac4fd875~appgver_17c4413a7c908191aa26f6cd3e507f8b`).
-- Deployment ID: `appgdep_6a750775490c8191b9df9bb0224a0ba8`.
+- Deployed source SHA: `6a355c241b565af863058f40ee88db9904dfbf82`.
+- Saved Sites version: `11` (`appgprj_6a681e7c21f4819182043900ac4fd875~appgver_418f2c7c8ccc8191bf4da989cb5f9e68`).
+- Deployment ID: `appgdep_6a750d9c255c8191aa7b1d495ee946b1`.
 - Provider deployment ID: `blaizexb--tradewind-dealflow`.
 - The deployed archive contained `dist/.openai/drizzle/0000_massgis_ingestion.sql`,
   `0001_harden_ingestion_runs.sql`, and `0002_control_plane.sql`, plus the
   logical `DB` binding in `.openai/hosting.json`.
-- Private authenticated page checks returned 200 for `/`, `/dashboard`,
-  `/sources`, `/pipeline`, `/approvals`, and `/compliance`; `/healthz` returned
-  the expected acquisitions release contract with `outreach: "disabled"`.
+- The deployment remains private. Anonymous edge requests, including `/healthz`
+  and `/api/ai/field-generation`, correctly return the Sites sign-in gate with
+  HTTP 401. Owner-session route checks and authenticated D1 reads remain
+  pending the owner-session verification gate.
 - An identity-less Sites bypass cannot forward the signed-in user headers used
   by the D1 API routes, so live authenticated API reads and the provider-side
   migration/cron receipts remain pending owner-session verification. No claim
