@@ -89,3 +89,22 @@ git diff --check         # passed
 These results were recorded from the exact candidate checkout on 2026-08-06.
 Local success does not prove deployment, D1 migration application, or provider
 access.
+
+## Current private deployment receipt
+
+- Deployment status: succeeded on 2026-08-06.
+- Production URL: `https://tradewind-dealflow.blaizexb.chatgpt.site`.
+- Deployed source SHA: `3083b87f2bccd2d1f477706c813a600e79ad7a4c`.
+- Saved Sites version: `10` (`appgprj_6a681e7c21f4819182043900ac4fd875~appgver_17c4413a7c908191aa26f6cd3e507f8b`).
+- Deployment ID: `appgdep_6a750775490c8191b9df9bb0224a0ba8`.
+- Provider deployment ID: `blaizexb--tradewind-dealflow`.
+- The deployed archive contained `dist/.openai/drizzle/0000_massgis_ingestion.sql`,
+  `0001_harden_ingestion_runs.sql`, and `0002_control_plane.sql`, plus the
+  logical `DB` binding in `.openai/hosting.json`.
+- Private authenticated page checks returned 200 for `/`, `/dashboard`,
+  `/sources`, `/pipeline`, `/approvals`, and `/compliance`; `/healthz` returned
+  the expected acquisitions release contract with `outreach: "disabled"`.
+- An identity-less Sites bypass cannot forward the signed-in user headers used
+  by the D1 API routes, so live authenticated API reads and the provider-side
+  migration/cron receipts remain pending owner-session verification. No claim
+  of live D1 mutation or hourly execution is made from this receipt.
