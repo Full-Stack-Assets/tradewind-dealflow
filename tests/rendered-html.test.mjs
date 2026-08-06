@@ -79,8 +79,8 @@ test("generated deployment config omits the obsolete nodejs compatibility flag",
 const routes = [
   ["/dashboard", /Current operating snapshot/i, /Inspecting browser workspace/i],
   ["/deal-lab", /Deal Lab/i, /Generate with AI/i],
-  ["/pipeline", /Pipeline/i, /Your pipeline is empty/i],
-  ["/sources", /MassGIS standing policy/i, /Import all safe records/i],
+  ["/pipeline", /Pipeline/i, /Automated lead intake/i],
+  ["/sources", /MassGIS standing policy/i, /Automatic handoff/i],
   ["/approvals", /Approval Queue/i, /Hash-bound human review/i],
   ["/buyers", /Buyer workspace/i, /No buyer profiles yet/i],
   ["/seller-property", /Seller\/Property Workspace/i, /Drafts unpublished/i],
@@ -98,7 +98,7 @@ for (const [path, heading, requiredCopy] of routes) {
     assert.match(html, heading);
     assert.match(html, requiredCopy);
     assert.match(html, /Skip to main content/i);
-    assert.match(html, /stored only in this browser|Execution remains fail-closed/i);
+    assert.match(html, /stored only in this browser|Execution remains fail-closed|Human approval remains required|MassGIS runs on schedule|Approve one bounded/i);
     assert.doesNotMatch(html, /123 Main St|Jane Seller|Acme Buyers|demo property|sample buyer/i);
   });
 }
@@ -135,35 +135,31 @@ test("pages with multiple guarded actions do not reuse accessible IDs", async ()
   assert.deepEqual([...new Set(duplicates)], []);
 });
 
-test("pipeline renders the local lead engine and hard action boundaries", async () => {
+test("pipeline renders the automated lead engine and hard action boundaries", async () => {
   const response = await render("/pipeline");
   const html = await response.text();
 
-  assert.match(html, /Authorized CSV intake/i);
-  assert.match(html, /Configure launch buy box/i);
-  assert.match(html, /The selected file stays in this browser/i);
-  assert.match(html, /Apply safe records/i);
-  assert.match(html, /A score never authorizes contact/i);
-  assert.match(html, /Export property XLSX/i);
-  assert.match(html, /No real property records yet/i);
+  assert.match(html, /Automated lead intake/i);
+  assert.match(html, /D1 records|MassGIS records in D1/i);
+  assert.match(html, /No CSV upload/i);
+  assert.match(html, /No automated leads yet|Loading automated leads/i);
   assert.doesNotMatch(
     html,
     /Send campaign|Text owner|Email owner|Autodial|Upload property CSV/i,
   );
 });
 
-test("sources renders bounded approval, scheduling, intake, and audit without outreach", async () => {
+test("sources renders bounded approval, scheduling, and audit without manual intake", async () => {
   const response = await render("/sources");
   const html = await response.text();
 
   assert.match(html, /MassGIS Property Tax Parcels/i);
   assert.match(html, /Approval diff/i);
   assert.match(html, /Minimum last-sale age/i);
-  assert.match(html, /Run now/i);
   assert.match(html, /Latest source run counts/i);
   assert.match(html, /Grouped, not per-record approval/i);
-  assert.match(html, /Import all safe records/i);
-  assert.match(html, /Download audit/i);
+  assert.match(html, /there is no browser import step/i);
+  assert.doesNotMatch(html, /Import all safe records|Download audit|Run now/i);
   assert.doesNotMatch(html, /MassGIS ingestion release/i);
   assert.doesNotMatch(html, /Send campaign|Text owner|Email owner|Autodial|OWNER1|OWN_ADDR/i);
 });
@@ -172,7 +168,7 @@ test("pipeline and dashboard render their concise source operating health", asyn
   const pipeline = await (await render("/pipeline")).text();
   const dashboard = await (await render("/dashboard")).text();
 
-  assert.match(pipeline, /Latest run import total/i);
+  assert.match(pipeline, /Owner matched|Automated lead totals/i);
   assert.match(dashboard, /Next scheduled run/i);
 });
 
@@ -204,9 +200,11 @@ test("health endpoint keeps ingestion as an optional product capability", async 
     release: "acquisitions-os",
     outreach: "disabled",
     ingestion: {
-      manual: "enabled",
+      manual: "disabled",
       scheduled: "enabled",
       ownerContactFields: "disabled",
+      leadAutomation: "available",
+      ownerEnrichment: "disabled",
     },
   });
 });

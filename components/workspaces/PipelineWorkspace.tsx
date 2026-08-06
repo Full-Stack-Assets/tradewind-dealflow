@@ -1,261 +1,98 @@
 "use client";
 
-import {
-  useRef,
-  useState,
-  type ChangeEvent,
-} from "react";
+import { useEffect, useState } from "react";
 
-import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { useLocalData } from "@/components/LocalDataProvider";
-import { AuthorizedCsvImport } from "@/components/pipeline/AuthorizedCsvImport";
-import { BuyBoxForm } from "@/components/pipeline/BuyBoxForm";
-import { QualificationPanel } from "@/components/pipeline/QualificationPanel";
-import {
-  EmptyState,
-  LocalDataNotice,
-  StatusPill,
-  WorkspaceHeader,
-} from "@/components/WorkspaceShell";
-import { SourceHealthStrip } from "@/components/workspaces/SourceHealthStrip";
-import { downloadBlob, downloadText } from "@/lib/download";
-import {
-  serializeData,
-  serializePipelineCsv,
-} from "@/lib/import-export";
-import { serializePipelineXlsx } from "@/lib/xlsx";
-import {
-  readWorkspaceBackup,
-  shouldOfferWorkspaceClear,
-} from "@/lib/local-storage";
-import type { DealFlowData } from "@/lib/types";
+import { EmptyState, StatusPill, WorkspaceHeader } from "@/components/WorkspaceShell";
+import { getAutomatedLeads, type AutomatedLeadListItem } from "@/lib/automation/client";
+
+function money(value: number | null): string {
+  return value === null
+    ? "Not supplied"
+    : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value);
+}
+
+function ownerLabel(lead: AutomatedLeadListItem): string {
+  return lead.ownerNames.length > 0 ? lead.ownerNames.join(", ") : "Owner enrichment pending";
+}
 
 export function PipelineWorkspace() {
-  const {
-    data,
-    replaceData,
-    clearData,
-    storageStatus,
-    writesSupported,
-  } = useLocalData();
-  const [clearOpen, setClearOpen] = useState(false);
-  const [pendingImport, setPendingImport] = useState<DealFlowData | null>(null);
-  const [message, setMessage] = useState("");
-  const backupInputRef = useRef<HTMLInputElement>(null);
-  const hasLocalData =
-    data.deals.length > 0 ||
-    data.buyers.length > 0 ||
-    data.analyses.length > 0 ||
-    data.preferences.selectedState !== null ||
-    data.preferences.participationPath !== null ||
-    Object.values(data.curriculum).some(Boolean) ||
-    Object.values(data.weekProgress).some(Boolean) ||
-    Object.values(data.readinessChecks).some(Boolean) ||
-    Object.values(data.compliance.outreachChecks).some(Boolean) ||
-    Object.values(data.compliance.marketingChecks).some(Boolean) ||
-    data.dealDeskDraft.dealId !== "" ||
-    data.dealDeskDraft.summary !== "";
-  const offerWorkspaceClear = shouldOfferWorkspaceClear(
-    hasLocalData,
-    storageStatus,
-  );
+  const [leads, setLeads] = useState<AutomatedLeadListItem[]>([]);
+  const [state, setState] = useState<"loading" | "ready" | "auth" | "error">("loading");
 
-  const readBackup = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const result = await readWorkspaceBackup(file);
-    event.target.value = "";
-    if (!result.ok) {
-      setMessage(`Backup rejected: ${result.errors.join(" ")}`);
-      return;
-    }
-    setPendingImport(result.data);
-    setMessage(
-      "Backup validated. Confirm replacement before any browser data changes.",
-    );
-  };
+  useEffect(() => {
+    let mounted = true;
+    void getAutomatedLeads({ limit: 100 })
+      .then((next) => {
+        if (!mounted) return;
+        setLeads(next);
+        setState("ready");
+      })
+      .catch((error: unknown) => {
+        if (!mounted) return;
+        setState(error instanceof Error && /authenticated|owner session/i.test(error.message) ? "auth" : "error");
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
-  const restoreBackup = async () => {
-    if (!pendingImport) return;
-    const result = await replaceData(pendingImport);
-    if (!result.ok) {
-      setMessage(result.message);
-      return;
-    }
-    setPendingImport(null);
-    setMessage("Validated backup restored in this browser.");
-  };
-
-  const clearWorkspace = async () => {
-    const result = await clearData();
-    if (!result.ok) {
-      setMessage(result.message);
-      return;
-    }
-    setClearOpen(false);
-    setMessage("Local workspace cleared. This action cannot be undone.");
-  };
+  const enriched = leads.filter((lead) => lead.enrichmentStatus === "available").length;
+  const pending = leads.length - enriched;
 
   return (
     <>
       <WorkspaceHeader
-        eyebrow="Fast-track lead engine"
+        eyebrow="Automated lead intake"
         title="Pipeline"
-        description="Import authorized records, apply one narrow buy box, and move only evidence-backed research forward."
+        description="MassGIS runs on schedule, RentCast owner enrichment is server-side, and this screen is a review surface—not an import or typing task."
       />
-      <LocalDataNotice />
-      <SourceHealthStrip surface="pipeline" />
 
-      <section className="toolbar panel" aria-label="Pipeline tools">
-        <div className="toolbar-copy">
-          <StatusPill tone="neutral">{data.deals.length} records</StatusPill>
-          <p>
-            No telephone, text, email, direct-mail, offer, contract, or public
-            marketing action is sent from this workspace.
-          </p>
-        </div>
-        <div className="button-row">
-          <button
-            className="button button-quiet button-small"
-            type="button"
-            onClick={() =>
-              downloadText(
-                "tradewind-dealflow-backup.json",
-                serializeData(data),
-                "application/json;charset=utf-8",
-              )
-            }
-          >
-            Export JSON backup
-          </button>
-          <button
-            className="button button-quiet button-small"
-            type="button"
-            disabled={data.deals.length === 0}
-            onClick={() =>
-              downloadText(
-                "tradewind-pipeline.csv",
-                serializePipelineCsv(data.deals),
-                "text/csv;charset=utf-8",
-              )
-            }
-          >
-            Export property CSV
-          </button>
-          <button
-            className="button button-quiet button-small"
-            type="button"
-            disabled={data.deals.length === 0}
-            onClick={() => {
-              const bytes = serializePipelineXlsx(data.deals);
-              downloadBlob("tradewind-pipeline.xlsx", new Blob([bytes.buffer as ArrayBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
-            }}
-          >
-            Export property XLSX
-          </button>
-          <button
-            className="button button-quiet button-small"
-            type="button"
-            disabled={!writesSupported}
-            onClick={() => backupInputRef.current?.click()}
-          >
-            Restore JSON backup
-          </button>
-          <input
-            className="visually-hidden"
-            ref={backupInputRef}
-            type="file"
-            disabled={!writesSupported}
-            accept="application/json,.json"
-            onChange={readBackup}
-            aria-label="Restore a Tradewind DealFlow JSON backup"
-          />
-          {offerWorkspaceClear && (
-            <button
-              className="button button-danger button-small"
-              type="button"
-              disabled={!writesSupported}
-              onClick={() => setClearOpen(true)}
-            >
-              Clear local workspace
-            </button>
-          )}
-        </div>
-      </section>
-
-      {message && (
-        <p className="persistent-message" role="status" aria-live="polite">
-          {message}
-        </p>
-      )}
-
-      <BuyBoxForm key={JSON.stringify(data.buyBox)} />
-      <AuthorizedCsvImport />
-
-      <aside className="action-boundary" aria-label="Lead engine safety boundary">
-        <strong>A score never authorizes contact.</strong>
-        <span>
-          Every imported record begins in Research. First contact, offers,
-          contracts, buyer selection, public marketing, money, and closing
-          instructions stay outside this release or require human approval.
-        </span>
+      <aside className="snapshot-boundary" aria-label="Automated lead boundary">
+        <strong>Five-minute workflow: open Pipeline, review the newest records, then move approved work into Deal work.</strong>
+        <p>No CSV upload, manual property retyping, contact harvesting, outbound calling, texting, email, or contract execution happens here.</p>
       </aside>
 
-      {data.deals.length === 0 ? (
-        <section className="panel lead-engine-section" aria-label="Property records">
-          <EmptyState
-            eyebrow="Authorized records only"
-            title="No real property records yet"
-          >
-            Your pipeline is empty. Select an authorized CSV above, review the
-            preview, resolve possible matches, and apply only safe rows. No
-            sample properties are included.
-          </EmptyState>
-        </section>
-      ) : (
-        <section
-          className="lead-engine-section qualification-list"
-          aria-labelledby="qualification-results-title"
-        >
+      <section className="metric-grid" aria-label="Automated lead totals">
+        {[
+          ["New leads", leads.length, "MassGIS records in D1"],
+          ["Owner matched", enriched, "RentCast facts available"],
+          ["Needs enrichment", pending, "No owner facts claimed"],
+          ["Source", "MassGIS", "Official parcel workflow"],
+          ["Mode", "Review", "Human approval remains required"],
+        ].map(([label, value, detail]) => (
+          <article key={String(label)}>
+            <span className="metric-icon sea" aria-hidden="true">◇</span>
+            <span>{label}</span><strong>{value}</strong><small>{detail}</small>
+          </article>
+        ))}
+      </section>
+
+      {state === "loading" && <section className="panel" role="status"><p>Loading automated leads from D1…</p></section>}
+      {state === "auth" && <section className="panel" role="alert"><EmptyState eyebrow="Owner session required" title="Sign in to view automated leads">The deployment correctly protects D1 reads. Refresh after the private Sites owner session is established.</EmptyState></section>}
+      {state === "error" && <section className="panel" role="alert"><EmptyState eyebrow="Automated service unavailable" title="No lead data was invented">The server lead route could not be verified. Check the deployment and D1 migration receipt, then retry.</EmptyState></section>}
+      {state === "ready" && leads.length === 0 && <section className="panel"><EmptyState eyebrow="Waiting for the next cycle" title="No automated leads yet">Approve the MassGIS source policy once. The hourly worker will retrieve the bounded parcel set and stage it here automatically.</EmptyState></section>}
+      {state === "ready" && leads.length > 0 && (
+        <section className="lead-engine-section qualification-list" aria-labelledby="automated-leads-title">
           <div className="section-heading">
-            <div>
-              <span className="mini-label">Research records</span>
-              <h2 id="qualification-results-title">
-                Qualification and provenance
-              </h2>
-            </div>
-            <span className="status-pill neutral">
-              {data.deals.length} total
-            </span>
+            <div><span className="mini-label">D1 system of record</span><h2 id="automated-leads-title">Newest automated leads</h2></div>
+            <StatusPill tone="good">{leads.length} records</StatusPill>
           </div>
-          {data.deals.map((deal) => (
-            <QualificationPanel key={deal.id} deal={deal} />
+          {leads.map((lead) => (
+            <article className="panel" key={lead.id}>
+              <div className="panel-heading">
+                <div><span className="mini-label">{lead.provider === "rentcast" ? "MassGIS + RentCast" : "MassGIS only"}</span><h3>{lead.address}</h3></div>
+                <StatusPill tone={lead.enrichmentStatus === "available" ? "good" : "warning"}>{lead.enrichmentStatus === "available" ? "Owner matched" : "Enrichment pending"}</StatusPill>
+              </div>
+              <div className="detail-grid">
+                <div><span className="mini-label">Location</span><strong>{lead.city}, {lead.state} {lead.zip}</strong></div>
+                <div><span className="mini-label">Estimated value</span><strong>{money(lead.estimatedValue)}</strong></div>
+                <div><span className="mini-label">Owner data</span><strong>{ownerLabel(lead)}</strong></div>
+                <div><span className="mini-label">Source record</span><strong>{lead.source.recordId}</strong></div>
+              </div>
+            </article>
           ))}
         </section>
       )}
-
-      <ConfirmDialog
-        open={pendingImport !== null}
-        title="Replace this browser workspace?"
-        description="The validated JSON backup will replace every local record and setting. Export the current workspace first if you may need it."
-        confirmLabel="Replace workspace"
-        cancelLabel="Keep current workspace"
-        onCancel={() => {
-          setPendingImport(null);
-          backupInputRef.current?.focus();
-        }}
-        onConfirm={() => void restoreBackup()}
-      />
-
-      <ConfirmDialog
-        open={clearOpen}
-        title="Clear the local workspace?"
-        description="All property records, source history, configuration, and other browser-only workspace data will be deleted. Export a backup first if you may need it."
-        confirmLabel="Clear workspace"
-        cancelLabel="Keep workspace"
-        onCancel={() => setClearOpen(false)}
-        onConfirm={() => void clearWorkspace()}
-      />
     </>
   );
 }

@@ -38,6 +38,7 @@ test("migrations create the MassGIS and control-plane tables", async (t) => {
   t.after(() => closeTestD1(db));
   assert.deepEqual(await tableNames(db), [
     "audit_events",
+    "automated_leads",
     "control_plane_actions",
     "control_plane_approval_decisions",
     "control_plane_approval_requests",
@@ -47,6 +48,8 @@ test("migrations create the MassGIS and control-plane tables", async (t) => {
     "control_plane_ledger_events",
     "control_plane_webhook_events",
     "ingestion_runs",
+    "lead_enrichment_attempts",
+    "lead_owner_profiles",
     "source_policies",
     "source_records",
   ]);

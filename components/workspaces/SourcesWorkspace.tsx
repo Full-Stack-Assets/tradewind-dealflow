@@ -3,17 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useLocalData } from "@/components/LocalDataProvider";
-import { LocalDataNotice, StatusPill, WorkspaceHeader } from "@/components/WorkspaceShell";
+import { StatusPill, WorkspaceHeader } from "@/components/WorkspaceShell";
 import {
-  acknowledgeAndRefreshImportedRecords,
   approveSourcePolicy,
   getSourcePolicy,
   getSourceRecords,
   getSourceRuns,
-  startSourceRun,
 } from "@/lib/ingestion/client";
-import type { IngestionRun, SourceImportAcknowledgement, SourceImportOutcomeCounts, StagedSourceRecord } from "@/lib/ingestion/contracts";
-import { importSafeRecords } from "@/lib/ingestion/import-safe";
+import type { IngestionRun, StagedSourceRecord } from "@/lib/ingestion/contracts";
 import { applyStoredPolicyToDraft, MASSGIS_ENDPOINT, MASSGIS_FIELDS, syncInitialPolicyFromHydration, validatePolicy, type SourcePolicy } from "@/lib/ingestion/policy";
 import type { ApprovedPolicy } from "@/server/ingestion-store";
 
@@ -67,7 +64,7 @@ function policyApprovalDiff(active: ApprovedPolicy | null, draft: SourcePolicy):
 }
 
 export function SourcesWorkspace() {
-  const { data, hydrated, updateData, writesSupported } = useLocalData();
+  const { data, hydrated } = useLocalData();
   const [policy, setPolicy] = useState<SourcePolicy>(() =>
     initialPolicy(data.buyBox.financialThresholds.maximumEstimatedValue),
   );
@@ -75,8 +72,7 @@ export function SourcesWorkspace() {
   const [runs, setRuns] = useState<IngestionRun[]>([]);
   const [records, setRecords] = useState<StagedSourceRecord[]>([]);
   const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState<"approve" | "run" | "import" | null>(null);
-  const policyFormRef = useRef<HTMLFormElement>(null);
+  const [busy, setBusy] = useState<"approve" | null>(null);
   const policyHydrationState = useRef({ synced: false, edited: false, storedPolicyLoaded: false });
 
   const refresh = useCallback(async () => {
@@ -116,13 +112,6 @@ export function SourcesWorkspace() {
     return () => window.clearTimeout(timer);
   }, [refresh]);
 
-  const importableRecords = useMemo(
-    () => records.filter(
-      (record) => (record.classification === "safe" || record.classification === "changed")
-        && record.importedAt === null,
-    ),
-    [records],
-  );
   const groupedExceptions = useMemo(() => {
     const counts = new Map<string, number>();
     records.filter((record) => record.classification === "exception").forEach((record) => {
@@ -134,17 +123,10 @@ export function SourcesWorkspace() {
   const latest = runs[0] ?? null;
   const approvalDiff = useMemo(() => policyApprovalDiff(activePolicy, policy), [activePolicy, policy]);
 
-  function editPolicy(next: SourcePolicy) {
-    policyHydrationState.current.edited = true;
-    setPolicy(next);
-  }
-
   async function approve() {
-    if (!policyFormRef.current?.reportValidity()) return;
     const validated = validatePolicy(policy);
     if (!validated.ok) {
       setMessage(`Policy not approved: ${validated.error}.`);
-      policyFormRef.current.querySelector<HTMLInputElement>("input")?.focus();
       return;
     }
     setBusy("approve");
@@ -162,79 +144,16 @@ export function SourcesWorkspace() {
     }
   }
 
-  async function runNow() {
-    setBusy("run");
-    setMessage("");
-    try {
-      const run = await startSourceRun();
-      setMessage(`Run ${run.status}: ${run.safeCount} safe, ${run.exceptionCount} exceptions.`);
-      await refresh();
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Source run failed.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function importAllSafe() {
-    setBusy("import");
-    setMessage("");
-    let acknowledgements: SourceImportAcknowledgement[] = [];
-    let outcomeSummary = "";
-    let outcomeCounts: SourceImportOutcomeCounts = {
-      applied: 0,
-      changedSource: 0,
-      exactReimport: 0,
-      possiblePropertyMatch: 0,
-      excluded: 0,
-    };
-    const mutation = await updateData((current, mutationTime) => {
-      const result = importSafeRecords(current, importableRecords, mutationTime);
-      if (result.error) throw new Error(result.error);
-      acknowledgements = importableRecords.map((record, index) => ({
-        recordId: record.id,
-        outcome: result.outcomes[index],
-      }));
-      const count = (outcome: typeof result.outcomes[number]) =>
-        result.outcomes.filter((item) => item === outcome).length;
-      outcomeCounts = {
-        applied: count("applied"),
-        changedSource: count("changed-source"),
-        exactReimport: count("exact-reimport"),
-        possiblePropertyMatch: count("possible-property-match"),
-        excluded: count("excluded"),
-      };
-      outcomeSummary = `${outcomeCounts.applied} new, ${outcomeCounts.changedSource} changed, ${outcomeCounts.exactReimport} exact reimports, ${outcomeCounts.possiblePropertyMatch} held matches`;
-      return result.data;
-    });
-    if (!mutation.ok) {
-      setMessage(mutation.message);
-      setBusy(null);
-      return;
-    }
-    try {
-      const completion = await acknowledgeAndRefreshImportedRecords(acknowledgements, refresh);
-      setMessage(completion.refreshed
-        ? `Safe import complete: ${outcomeSummary}.`
-        : `Safe import complete: ${outcomeSummary}. Server acknowledgement succeeded, but source status refresh failed; reload to retry status.`);
-    } catch {
-      setMessage(`Local import complete: ${outcomeSummary}. Server acknowledgement failed; retry is safe.`);
-    } finally {
-      setBusy(null);
-    }
-  }
-
   return (
     <>
       <WorkspaceHeader
         eyebrow="Standing approval · query-only"
         title="Sources"
-        description="Approve one bounded MassGIS parcel policy, run it manually or on schedule, and import every safe staged record in one local batch."
+        description="Approve one bounded MassGIS parcel policy once. The worker retrieves and stages records automatically on the approved schedule."
       />
-      <LocalDataNotice />
       <aside className="snapshot-boundary">
         <strong>Official source: MassGIS Property Tax Parcels · item 73d4c766167848b795f1048cad3919c7 · layer 0.</strong>
-        <p>Geometry, owner names, owner addresses, phone, email, outreach, offers, contracts, and AI decisions are disabled.</p>
+        <p>MassGIS supplies parcel facts only. RentCast owner names and mailing addresses are retrieved separately on the server only after provider activation; phone, email, outreach, offers, contracts, and AI decisions remain disabled.</p>
       </aside>
       {message && <p className="persistent-message" role="status" aria-live="polite">{message}</p>}
 
@@ -245,45 +164,16 @@ export function SourcesWorkspace() {
             {activePolicy ? `Approved · v${activePolicy.version}` : "Approval required"}
           </StatusPill>
         </div>
-        <form
-          ref={policyFormRef}
-          onSubmit={(event) => {
-            event.preventDefault();
-            void approve();
-          }}
-        >
         <div className="form-grid three">
-          <label>Town IDs
-            <input required value={policy.townIds.join(", ")} onChange={(event) => editPolicy({ ...policy, townIds: event.target.value.split(",").map(Number).filter(Number.isInteger) })} />
-          </label>
-          <label>Use codes
-            <input required value={policy.useCodes.join(", ")} onChange={(event) => editPolicy({ ...policy, useCodes: event.target.value.split(",").map((value) => value.trim()).filter(Boolean) })} />
-          </label>
-          <label>Unit counts
-            <input required value={policy.unitCounts.join(", ")} onChange={(event) => editPolicy({ ...policy, unitCounts: event.target.value.split(",").map(Number).filter(Number.isInteger) })} />
-          </label>
-          <label>Maximum assessed value
-            <input type="number" min="0" value={policy.maximumAssessedValue ?? ""} onChange={(event) => editPolicy({ ...policy, maximumAssessedValue: event.target.value ? Number(event.target.value) : null })} />
-          </label>
-          <label>Maximum year built
-            <input type="number" min="1600" max="2100" value={policy.maximumYearBuilt ?? ""} onChange={(event) => editPolicy({ ...policy, maximumYearBuilt: event.target.value ? Number(event.target.value) : null })} />
-          </label>
-          <label>Minimum last-sale age (years)
-            <input type="number" min="0" step="1" value={policy.minimumLastSaleAgeYears ?? ""} onChange={(event) => editPolicy({ ...policy, minimumLastSaleAgeYears: event.target.value ? Number(event.target.value) : null })} />
-          </label>
-          <label>Maximum records per run
-            <input required type="number" min="100" max="100000" value={policy.maxRecordsPerRun} onChange={(event) => editPolicy({ ...policy, maxRecordsPerRun: Number(event.target.value) })} />
-          </label>
-          <label>Schedule hour (New York)
-            <input type="number" min="0" max="23" value={policy.scheduleHour} onChange={(event) => editPolicy({ ...policy, scheduleHour: Number(event.target.value) })} />
-          </label>
-          <label>Schedule minute
-            <input type="number" min="0" max="59" value={policy.scheduleMinute} onChange={(event) => editPolicy({ ...policy, scheduleMinute: Number(event.target.value) })} />
-          </label>
-          <label className="checkbox-row">
-            <input type="checkbox" checked={policy.scheduleEnabled} onChange={(event) => editPolicy({ ...policy, scheduleEnabled: event.target.checked })} />
-            Daily schedule enabled
-          </label>
+          <div><span className="mini-label">Town IDs</span><output>{policy.townIds.join(", ")}</output></div>
+          <div><span className="mini-label">Use codes</span><output>{policy.useCodes.join(", ")}</output></div>
+          <div><span className="mini-label">Unit counts</span><output>{policy.unitCounts.join(", ")}</output></div>
+          <div><span className="mini-label">Maximum assessed value</span><output>{displayValue(policy.maximumAssessedValue)}</output></div>
+          <div><span className="mini-label">Maximum year built</span><output>{displayValue(policy.maximumYearBuilt)}</output></div>
+          <div><span className="mini-label">Minimum last-sale age</span><output>{displayValue(policy.minimumLastSaleAgeYears)} years</output></div>
+          <div><span className="mini-label">Records per run</span><output>{policy.maxRecordsPerRun}</output></div>
+          <div><span className="mini-label">Schedule</span><output>{String(policy.scheduleHour).padStart(2, "0")}:{String(policy.scheduleMinute).padStart(2, "0")} {policy.scheduleTimeZone}</output></div>
+          <div><span className="mini-label">Automation</span><output>{policy.scheduleEnabled ? "Enabled" : "Disabled"}</output></div>
         </div>
         <p className="panel-intro">
           Initial scope uses Fall River (95), New Bedford (201), 1–4 family use codes, the active buy-box value ceiling when configured, and a daily 02:00 America/New_York schedule.
@@ -298,14 +188,10 @@ export function SourcesWorkspace() {
             : activePolicy ? "Disabled." : "Pending approval."}
         </p>
         <div className="button-row">
-          <button className="button button-primary" type="submit" disabled={busy !== null}>
+          <button className="button button-primary" type="button" disabled={busy !== null} onClick={() => void approve()}>
             {busy === "approve" ? "Approving…" : "Approve policy"}
           </button>
-          <button className="button button-quiet" type="button" disabled={!activePolicy || busy !== null} onClick={() => void runNow()}>
-            {busy === "run" ? "Running…" : "Run now"}
-          </button>
         </div>
-        </form>
       </section>
 
       <section className="metric-grid" aria-label="Latest source run counts">
@@ -324,21 +210,16 @@ export function SourcesWorkspace() {
 
       <section className="sources-grid">
         <article className="panel">
-          <div className="panel-heading">
-            <div><span className="mini-label">One Web-Locked batch</span><h2>Safe intake</h2></div>
-            <StatusPill tone={importableRecords.length > 0 ? "good" : "neutral"}>{importableRecords.length} pending</StatusPill>
-          </div>
-          <p>Server-classified safe and changed-source records enter the local Pipeline batch; new properties always start at Research and changed facts stay conflicts. Exact reruns do not duplicate deals.</p>
-          <button className="button button-primary" type="button" disabled={!writesSupported || importableRecords.length === 0 || busy !== null} onClick={() => void importAllSafe()}>
-            {busy === "import" ? "Importing…" : "Import all safe records"}
-          </button>
+          <div className="panel-heading"><div><span className="mini-label">Automatic handoff</span><h2>D1 pipeline</h2></div><StatusPill tone="good">Scheduled</StatusPill></div>
+          <p>Safe records are written directly to the authenticated D1 lead surface. Pipeline reads them automatically; there is no browser import step.</p>
+          <a className="button button-primary" href="/pipeline">Open automated Pipeline</a>
         </article>
         <article className="panel">
           <div className="panel-heading"><div><span className="mini-label">Grouped, not per-record approval</span><h2>Exceptions</h2></div></div>
           {groupedExceptions.length === 0 ? <p>No exception totals are available.</p> : (
             <ul>{groupedExceptions.map(([reason, count]) => <li key={reason}><strong>{count}</strong> · {reason}</li>)}</ul>
           )}
-          <a className="button button-quiet" href="/api/sources/audit">Download audit</a>
+          <p className="panel-intro">Audit events remain server-side for authorized evidence review.</p>
         </article>
       </section>
 

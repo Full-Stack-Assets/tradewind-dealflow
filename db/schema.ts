@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const sourcePolicies = sqliteTable("source_policies", {
   id: text("id").primaryKey(),
@@ -72,3 +72,60 @@ export const auditEvents = sqliteTable("audit_events", {
   previousHash: text("previous_hash").notNull().unique(),
   eventHash: text("event_hash").notNull().unique(),
 });
+
+export const automatedLeads = sqliteTable("automated_leads", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  sourceIdentity: text("source_identity").notNull(),
+  sourceRecordId: text("source_record_id").notNull(),
+  sourceFingerprint: text("source_fingerprint").notNull(),
+  sourceRetrievedAt: text("source_retrieved_at").notNull(),
+  provider: text("provider").notNull(),
+  providerPropertyId: text("provider_property_id").notNull(),
+  address: text("address").notNull(),
+  city: text("city").notNull(),
+  state: text("state").notNull(),
+  zip: text("zip").notNull(),
+  estimatedValue: real("estimated_value"),
+  ownerNamesJson: text("owner_names_json").notNull(),
+  ownerType: text("owner_type"),
+  ownerMailingAddressJson: text("owner_mailing_address_json"),
+  ownerOccupied: integer("owner_occupied", { mode: "boolean" }),
+  enrichmentStatus: text("enrichment_status").notNull().default("available"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("automated_leads_org_source_unique").on(table.organizationId, table.sourceIdentity, table.sourceRecordId),
+  uniqueIndex("automated_leads_org_provider_unique").on(table.organizationId, table.provider, table.providerPropertyId),
+  index("automated_leads_org_status_idx").on(table.organizationId, table.enrichmentStatus, table.updatedAt),
+  index("automated_leads_org_location_idx").on(table.organizationId, table.state, table.city, table.zip),
+]);
+
+export const leadOwnerProfiles = sqliteTable("lead_owner_profiles", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  leadId: text("lead_id").notNull().references(() => automatedLeads.id, { onDelete: "restrict" }),
+  provider: text("provider").notNull(),
+  providerPropertyId: text("provider_property_id").notNull(),
+  ownerJson: text("owner_json").notNull(),
+  observedAt: text("observed_at").notNull(),
+}, (table) => [
+  uniqueIndex("lead_owner_profiles_lead_provider_unique").on(table.organizationId, table.leadId, table.provider),
+]);
+
+export const leadEnrichmentAttempts = sqliteTable("lead_enrichment_attempts", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  leadId: text("lead_id").notNull().references(() => automatedLeads.id, { onDelete: "restrict" }),
+  provider: text("provider").notNull(),
+  requestHash: text("request_hash").notNull(),
+  status: text("status").notNull(),
+  responseStatus: integer("response_status"),
+  errorCode: text("error_code"),
+  startedAt: text("started_at").notNull(),
+  completedAt: text("completed_at"),
+  nextAttemptAt: text("next_attempt_at"),
+}, (table) => [
+  uniqueIndex("lead_enrichment_attempts_idempotency_unique").on(table.organizationId, table.leadId, table.provider, table.requestHash),
+  index("lead_enrichment_attempts_retry_idx").on(table.organizationId, table.status, table.nextAttemptAt),
+]);

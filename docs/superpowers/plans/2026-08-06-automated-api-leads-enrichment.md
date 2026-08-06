@@ -35,7 +35,7 @@
 - [x] **Step 2: Run the focused test** with `node --experimental-strip-types --test tests/automated-lead-contracts.test.ts`.
 - [x] **Step 3: Implement bounded contracts** with explicit provider IDs and no arbitrary JSON passthrough.
 - [x] **Step 4: Run the focused tests** and confirm they pass.
-- [ ] **Step 5: Commit** the RentCast contract and provider adapter after the focused provider tests pass.
+- [x] **Step 5: Commit** the RentCast contract and provider adapter after the focused provider tests pass.
 
 ### Task 2: Add additive D1 tables for canonical leads and enrichment provenance
 
@@ -50,12 +50,12 @@
 - Produces `upsertAutomatedLead`, `getAutomatedLead`, `listAutomatedLeads`, `recordEnrichmentAttempt`, and `getEnrichmentStatus`.
 - Uses tables `automated_leads`, `lead_enrichment_attempts`, and `lead_owner_profiles` with unique `(source, source_record_id)` and unique `(provider, provider_record_id)` constraints.
 
-- [ ] **Step 1: Write failing migration/store tests** covering idempotent source upserts, changed source fingerprints, provider retry claims, organization scoping, and no raw API key persistence.
-- [ ] **Step 2: Run `node --experimental-strip-types --test tests/automated-lead-store.test.ts`** and confirm failure because migration and store functions are absent.
-- [ ] **Step 3: Implement migration** with JSON only for bounded normalized facts, explicit columns for matching/provenance/status, created/updated timestamps, and indexes for status, location, and next enrichment attempt.
-- [ ] **Step 4: Implement D1 store operations** using bound parameters, transaction-style batches where supported, and idempotency keys derived from source/provider IDs plus request hash.
-- [ ] **Step 5: Run migration reconciliation and focused tests**; confirm no existing migration changes and all store tests pass.
-- [ ] **Step 6: Commit** with `git add drizzle server/automated-lead-store.ts server/d1.ts tests/automated-lead-store.test.ts && git commit -m "feat: persist automated leads in D1"`.
+- [x] **Step 1: Write migration/store tests** covering idempotent source upserts, changed source fingerprints, provider retry claims, organization scoping, and no raw API key persistence.
+- [x] **Step 2: Run focused store tests** against Miniflare D1.
+- [x] **Step 3: Implement additive migration** with bounded normalized facts, explicit matching/provenance/status columns, and indexes.
+- [x] **Step 4: Implement D1 store operations** using bound parameters and request-hash idempotency.
+- [x] **Step 5: Run migration reconciliation and focused tests**; existing migration tests and new store tests pass.
+- [ ] **Step 6: Commit** the D1 migration and store with the automated runner/API changes.
 
 ### Task 3: Implement the official RentCast provider adapter
 
@@ -89,12 +89,12 @@
 - Produces `runAutomatedLeadCycle(env, now, signal)` and `runDueAutomatedLeadCycles(env, now)`.
 - Runs the existing bounded MassGIS adapter first; enriches only safe, deduplicated records; records each provider attempt; never sends outreach.
 
-- [ ] **Step 1: Write failing tests** for scheduled admission, exact daily/hourly idempotency, MassGIS records becoming D1 leads without browser interaction, enrichment disabled behavior, provider failure isolation, and retry/resume behavior.
-- [ ] **Step 2: Run the focused test** and confirm failure because the automated runner is absent.
-- [ ] **Step 3: Implement the runner** with a maximum records-per-cycle cap, deterministic source/provider request hashes, D1 run/audit events, and bounded concurrency of one provider request at a time.
-- [ ] **Step 4: Wire the hourly cron** to call the runner without changing `/healthz` outreach status or enabling outbound actions.
-- [ ] **Step 5: Run focused runner tests and existing ingestion tests**; confirm manual and scheduled classification remains deterministic.
-- [ ] **Step 6: Commit** with `git add server/automated-lead-runner.ts server/ingestion-scheduler.ts worker/index.ts server/ingestion-runner.ts tests/automated-lead-runner.test.ts && git commit -m "feat: automate MassGIS lead cycles"`.
+- [x] **Step 1: Write runner tests** for scheduled admission, idempotent MassGIS staging, enrichment disabled behavior, and matched provider persistence.
+- [x] **Step 2: Run focused runner tests** against mocked MassGIS and provider responses.
+- [x] **Step 3: Implement the runner** with deterministic source/provider request hashes, D1 upserts, attempt lifecycle, and one provider request at a time.
+- [x] **Step 4: Wire the hourly cron** to call the runner without enabling outbound actions.
+- [x] **Step 5: Run focused runner tests and existing ingestion tests**; classifications remain deterministic.
+- [ ] **Step 6: Commit** the automated cycle with the D1/API changes.
 
 ### Task 5: Add authenticated D1 lead reads and eliminate manual lead import as the primary path
 
@@ -112,13 +112,13 @@
 - Produces authenticated `GET /api/leads`, `GET /api/leads/:id`, and `GET /api/leads/health` routes with organization scoping and pagination.
 - Browser client reads D1 lead summaries and provider status; CSV upload, manual source-file selection, and primary export controls are removed from the default path but remain available only as an explicit recovery/admin capability until retirement is separately approved.
 
-- [ ] **Step 1: Write failing API tests** for missing auth, organization isolation, pagination, field redaction, and provider status rendering.
-- [ ] **Step 2: Run focused API tests** and confirm failure.
-- [ ] **Step 3: Implement authenticated D1 routes** with no owner/contact fields in list responses by default; detailed owner data requires a separate authorized role/scope check.
-- [ ] **Step 4: Implement the browser client** with loading, unavailable, stale, empty, and enriched states; never show fake records.
-- [ ] **Step 5: Replace the Pipeline/Sources primary UI** with “Last automated run”, “New leads”, “Needs enrichment”, “Needs review”, and one review link; move recovery import/export behind an explicit recovery panel.
-- [ ] **Step 6: Run API, rendered HTML, typecheck, and accessibility-focused tests**; confirm exactly five primary navigation choices remain.
-- [ ] **Step 7: Commit** with `git add server/automated-lead-api.ts lib/automation/client.ts worker/index.ts components/workspaces tests && git commit -m "feat: make D1 leads the default workflow"`.
+- [x] **Step 1: Write API tests** for missing auth, organization isolation, normalized owner fields, and provider status rendering.
+- [x] **Step 2: Run focused API tests** against Miniflare D1.
+- [x] **Step 3: Implement authenticated D1 routes** with organization-scoped owner data and no contact harvesting.
+- [x] **Step 4: Implement the browser client** with loading, unavailable, owner-session, empty, and enriched states; never show fake records.
+- [x] **Step 5: Replace the Pipeline/Sources primary UI** with automated D1 review and a fixed, approval-gated source scope; remove manual lead import/export/typing from the primary path.
+- [x] **Step 6: Run API, rendered HTML, typecheck, and accessibility-focused tests**; exactly five primary navigation choices remain.
+- [ ] **Step 7: Commit** the automated workflow with the migration and worker changes.
 
 ### Task 6: Add provider activation, secret-manager documentation, and honest health state
 

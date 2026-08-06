@@ -8,9 +8,11 @@ export function GET() {
       release: "acquisitions-os",
       outreach: "disabled",
       ingestion: {
-        manual: "enabled",
+        manual: "disabled",
         scheduled: "enabled",
         ownerContactFields: "disabled",
+        leadAutomation: "available",
+        ownerEnrichment: "disabled",
       },
     },
     {

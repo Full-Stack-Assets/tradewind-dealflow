@@ -5,7 +5,10 @@ import { handleIngestionApi } from "../server/ingestion-api.ts";
 import { handleControlPlaneApi } from "../server/control-plane-api.ts";
 import { handleAiFieldGeneration } from "../server/ai-field-generation.ts";
 import { handleElevenLabsWebhook } from "../server/webhooks/elevenlabs.ts";
-import { runDuePolicies } from "../server/ingestion-scheduler.ts";
+import { handleAutomatedLeadApi } from "../server/automated-lead-api.ts";
+import { runDueAutomatedLeadCycles } from "../server/automated-lead-runner.ts";
+import { createRentCastProvider } from "../server/providers/rentcast.ts";
+import { isRentCastActivated } from "../server/providers/provider-config.ts";
 import type { D1Database } from "../server/d1.ts";
 
 interface Env {
@@ -22,6 +25,11 @@ interface Env {
   DB: D1Database;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
+  RENTCAST_API_KEY?: string;
+  RENTCAST_ENABLED?: string;
+  RENTCAST_ALLOWED_MARKETS?: string;
+  RENTCAST_DATA_USE_APPROVAL?: string;
+  DEALFLOW_ORGANIZATION_ID?: string;
 }
 
 interface ExecutionContext {
@@ -42,6 +50,8 @@ const worker = {
     if (ingestionResponse) return ingestionResponse;
     const controlPlaneResponse = await handleControlPlaneApi(request, env);
     if (controlPlaneResponse) return controlPlaneResponse;
+    const leadResponse = await handleAutomatedLeadApi(request, env);
+    if (leadResponse) return leadResponse;
     if (url.pathname === "/api/ai/field-generation") {
       return handleAiFieldGeneration(request, env);
     }
@@ -67,7 +77,8 @@ const worker = {
     env: Env,
     ctx: ExecutionContext,
   ): Promise<void> {
-    ctx.waitUntil(runDuePolicies(env, new Date(controller.scheduledTime)));
+    const rentCastProvider = isRentCastActivated(env) ? createRentCastProvider(env) : undefined;
+    ctx.waitUntil(runDueAutomatedLeadCycles(env, new Date(controller.scheduledTime), undefined, rentCastProvider));
   },
 };
 

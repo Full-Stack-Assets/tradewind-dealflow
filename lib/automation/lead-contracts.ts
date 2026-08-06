@@ -7,7 +7,7 @@ export type OwnerMailingAddress = {
 };
 
 export type AutomatedLeadRecord = {
-  provider: "rentcast";
+  provider: "massgis" | "rentcast";
   providerPropertyId: string;
   address: string;
   city: string;

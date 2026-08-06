@@ -39,6 +39,14 @@ provider receipt, legal approval, or production deployment receipt.
 - `components/ai/GenerateWithAIButton.tsx` adds visible draft-generation
   controls to material free-text fields. Generated text is inserted as an
   editable draft and requires operator review before the existing save action.
+- `drizzle/0003_automated_leads.sql` adds organization-scoped D1 canonical lead,
+  owner-profile, and enrichment-attempt tables without a secret column.
+- `server/providers/rentcast.ts` implements bounded, server-only RentCast
+  property retrieval using `X-Api-Key`; `server/automated-lead-runner.ts`
+  stages MassGIS records and optionally persists matched owner facts.
+- `/api/leads`, `/api/leads/:id`, and `/api/leads/health` require the private
+  owner session and read organization-scoped D1 leads. Pipeline no longer
+  presents CSV import/export or manual property entry as its primary workflow.
 
 ## Configured-but-not externally verified
 
@@ -53,24 +61,30 @@ secret manager. They are intentionally absent from this repository:
 - `SKIP_TRACING_API_URL`
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL` (optional)
+- `RENTCAST_API_KEY`
+- `RENTCAST_ENABLED`
+- `RENTCAST_DATA_USE_APPROVAL`
 
 No local test uses a real credential. No live call, webhook delivery, or
-skip-tracing lookup was performed.
+skip-tracing lookup was performed. RentCast adapter tests use mocked responses
+only.
 
 ## Current release boundary
 
-- `/healthz` continues to report `outreach: "disabled"` for the existing
-  MassGIS release.
-- MassGIS remains owner/contact-free and is the only default scheduled
-  pipeline.
+- `/healthz` reports `outreach: "disabled"`, scheduled lead automation
+  available, and owner enrichment disabled until the deployment activation
+  flags and secret are present.
+- MassGIS remains the only default scheduled parcel source; RentCast is an
+  optional server-side owner-data enrichment stage.
 - AI field generation is draft assistance only; it does not make qualification,
   approval, outreach, legal, or underwriting decisions and remains unavailable
   until `OPENAI_API_KEY` is provisioned through the secret manager.
 - Outbound code is available only through server-side authorization and fails
   closed when configuration, approvals, authority, evidence, or kill-switch
   conditions are missing.
-- Contact enrichment, AI voice, outreach, contracts, and webhook-derived
-  business actions remain outside the verified MassGIS production workflow.
+- Contact phone/email enrichment, AI voice, outreach, contracts, and
+  webhook-derived business actions remain outside the verified production
+  workflow. Owner names/mailing addresses are not live-verified yet.
 
 ## Required external evidence before live activation
 
@@ -81,7 +95,8 @@ skip-tracing lookup was performed.
 - Authenticated production route checks for `/`, `/dashboard`, `/sources`,
   `/pipeline`, `/approvals`, `/compliance`, and `/healthz`.
 - D1 migration receipt confirming `0000_massgis_ingestion.sql`,
-  `0001_harden_ingestion_runs.sql`, and `0002_control_plane.sql` were applied.
+  `0001_harden_ingestion_runs.sql`, `0002_control_plane.sql`, and
+  `0003_automated_leads.sql` were applied.
 - Provider webhook test receipt, outbound test receipt, deployment SHA, and
   rollback version.
 

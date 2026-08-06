@@ -16,23 +16,19 @@ An operator can:
 - configure one versioned launch buy box for Bristol County, Massachusetts
   and/or Providence County, Rhode Island;
 - approve one versioned, owner-free MassGIS parcel policy;
-- run the same bounded retrieval manually or through the daily schedule;
+- approve one bounded retrieval policy and let the hourly worker run it;
 - inspect durable run counts, grouped exceptions, and the append-only audit
   export;
-- import all safe staged records through one Web-Locked local batch;
-- download a blank property CSV template;
-- select an authorized CSV that is decoded, validated, and planned entirely in
-  the browser;
-- review invalid rows, exact reimports, same-file duplicates, possible property
-  matches, changed source snapshots, restrictions, and potential fact
-  conflicts before saving;
-- apply reviewed safe rows through one serialized local mutation;
+- read automated MassGIS leads from organization-scoped D1 without a browser
+  import or repeated property typing;
+- optionally enrich approved parcel records with server-only RentCast owner
+  names and mailing addresses;
 - inspect each property’s source record, usage rights, confidence, freshness,
   conflicts, restrictions, qualification evidence, contact block, and next
   research task;
 - see a current dashboard snapshot with five launch qualification statuses
   and the Task 5 research-priority order; and
-- export and restore the full versioned workspace as JSON;
+- retain browser backup/restore only as a recovery capability;
 - create and review hash-bound approval requests in the Approval Queue; and
 - export the owner/contact-safe property pipeline as CSV or XLSX.
 
@@ -94,8 +90,8 @@ commit promotion, and private production health verification are tracked in
 | Route | Current purpose |
 | --- | --- |
 | `/dashboard` | Current buy-box, qualification, research, block, and storage snapshot |
-| `/pipeline` | Buy-box configuration, local CSV preview/apply, provenance review, and backup |
-| `/sources` | MassGIS policy approval, manual/scheduled runs, safe intake, exceptions, and audit |
+| `/pipeline` | Automated D1 leads, owner-enrichment status, and review queue |
+| `/sources` | MassGIS policy approval, scheduled runs, exceptions, and audit |
 | `/approvals` | Hash-bound human approval requests and decisions |
 | `/compliance` | Educational state lanes and planning-only controls |
 | `/healthz` | Declares the acquisitions OS release, optional ingestion capability, and disabled outreach state |

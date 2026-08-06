@@ -4,7 +4,7 @@ Release mode: Tradewind acquisitions OS with optional MassGIS ingestion
 
 Hosting target: the existing private OpenAI Sites project
 
-Data backend: D1 control plane plus browser-local working Pipeline
+Data backend: D1 control plane plus D1 automated-lead system of record
 
 ## Local setup
 
@@ -18,7 +18,8 @@ npm run dev
 No MassGIS credential is required. The deployment must provide logical D1
 binding `DB`, apply `drizzle/0000_massgis_ingestion.sql`,
 `drizzle/0001_harden_ingestion_runs.sql`, and
-`drizzle/0002_control_plane.sql`, and register hourly cron `0 * * * *`. Do
+`drizzle/0002_control_plane.sql`, and `drizzle/0003_automated_leads.sql`, and
+register hourly cron `0 * * * *`. Do
 not add secrets, private email addresses, seller records, buyer records, or
 production exports to source control.
 
@@ -48,15 +49,18 @@ alone is not a production release.
   "release": "acquisitions-os",
   "outreach": "disabled",
   "ingestion": {
-    "manual": "enabled",
+    "manual": "disabled",
     "scheduled": "enabled",
-    "ownerContactFields": "disabled"
+    "ownerContactFields": "disabled",
+    "leadAutomation": "available",
+    "ownerEnrichment": "disabled"
   }
 }
 ```
 
 The endpoint proves that the deployed worker responds with the declared mode.
-It does not inspect a user’s browser storage.
+It does not inspect a user’s browser storage. Authenticated `/api/leads` reads
+remain separately gated by the private owner session.
 
 ## Exact-commit Sites promotion
 
@@ -97,10 +101,9 @@ unless the owner explicitly authorizes an access-policy change.
 
 ## Secrets and external services
 
-This milestone has no required application secret; MassGIS is a public
-query-only provider. Future authentication, PostgreSQL, object storage,
-monitoring, property data, email, SMS, or voice services must use the
-deployment secret manager. Never place a credential in frontend code, git
+MassGIS is a public query-only provider. Future authentication, PostgreSQL,
+object storage, monitoring, property data, email, SMS, or voice services must
+use the deployment secret manager. Never place a credential in frontend code, git
 history, documentation, logs, health responses, screenshots, or project chat.
 
 The optional server-only AI drafting tool uses `OPENAI_API_KEY` and optional
@@ -115,6 +118,13 @@ The optional provider boundary uses server-only `ELEVENLABS_API_KEY`,
 `SKIP_TRACING_API_KEY`, and `SKIP_TRACING_API_URL`. Provisioning these values
 does not replace counsel approval, envelope authorization, or provider sandbox
 verification.
+
+The selected owner-data adapter uses server-only `RENTCAST_API_KEY` plus
+`RENTCAST_ENABLED=true` and `RENTCAST_DATA_USE_APPROVAL=approved`. Add these
+only through the private Sites deployment secret manager after the provider
+account, terms, and compliance review are complete. Never add the key to Git,
+local test fixtures, frontend code, logs, or chat. RentCast enrichment remains
+disabled until all three activation conditions are present.
 
 ## Rollback
 
