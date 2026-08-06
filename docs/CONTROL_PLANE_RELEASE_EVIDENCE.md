@@ -121,9 +121,9 @@ access.
 
 - Deployment status: succeeded on 2026-08-06 for the automated-lead candidate.
 - Production URL: `https://tradewind-dealflow.blaizexb.chatgpt.site`.
-- Deployed source SHA: `e30f04840c83807cf4b2645475eb37a4027db58c`.
-- Saved Sites version: `14` (`appgprj_6a681e7c21f4819182043900ac4fd875~appgver_9962883d23288191ae1091de077ec31d`).
-- Deployment ID: `appgdep_6a751a9e82448191961fe3f424016af4`.
+- Deployed source SHA: `db4536ae556349e2c915b0fcb5b788cbd689a06e`.
+- Saved Sites version: `15` (`appgprj_6a681e7c21f4819182043900ac4fd875~appgver_11e00f4691cc8191af98a9dda111e025`).
+- Deployment ID: `appgdep_6a751b20478c8191860b64b58c51a657`.
 - Provider deployment ID: `blaizexb--tradewind-dealflow`.
 - The deployed archive contained `dist/.openai/drizzle/0000_massgis_ingestion.sql`,
   `0001_harden_ingestion_runs.sql`, `0002_control_plane.sql`, and
