@@ -111,18 +111,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function parseMassGisDate(value: unknown): Date | null {
+  if (value === null) return null;
+  if (typeof value === "number") {
+    const date = new Date(value);
+    return Number.isFinite(date.getTime()) ? date : null;
+  }
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  const compact = /^(\d{4})(\d{2})(\d{2})$/.exec(normalized);
+  if (compact) {
+    const year = Number(compact[1]);
+    const month = Number(compact[2]);
+    const day = Number(compact[3]);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    return date.getUTCFullYear() === year
+      && date.getUTCMonth() === month - 1
+      && date.getUTCDate() === day
+      ? date
+      : null;
+  }
+  const iso = /^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(normalized);
+  if (!iso) return null;
+  const year = Number(iso[1]);
+  const month = Number(iso[2]);
+  const day = Number(iso[3]);
+  const calendarDate = new Date(Date.UTC(year, month - 1, day));
+  if (calendarDate.getUTCFullYear() !== year
+    || calendarDate.getUTCMonth() !== month - 1
+    || calendarDate.getUTCDate() !== day) return null;
+  const date = new Date(normalized);
+  return Number.isFinite(date.getTime()) ? date : null;
+}
+
 function isPossibleDate(value: unknown): boolean {
-  if (value === null) return true;
-  if (typeof value === "number") return Number.isFinite(value) && Number.isFinite(new Date(value).getTime());
-  if (typeof value !== "string") return false;
-  const match = /^(\d{4})-(\d{2})-(\d{2})(?:T.*)?$/.exec(value);
-  if (!match) return false;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const date = new Date(Date.UTC(year, month - 1, day));
-  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
-    && Number.isFinite(new Date(value).getTime());
+  return value === null || parseMassGisDate(value) !== null;
 }
 
 function validateFeature(feature: unknown, approvedFields: readonly string[], requireApprovedFields: boolean): MassGisFeature {
@@ -192,9 +215,7 @@ function text(value: unknown): string {
 }
 
 function toIsoDate(value: unknown): string | null {
-  if (value === null || value === undefined) return null;
-  const parsed = new Date(value as string | number);
-  return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : null;
+  return parseMassGisDate(value)?.toISOString() ?? null;
 }
 
 function sourceIdentity(attributes: Record<string, unknown>): string {

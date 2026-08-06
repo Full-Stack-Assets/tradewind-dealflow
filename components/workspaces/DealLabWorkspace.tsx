@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { GenerateWithAIButton } from "@/components/ai/GenerateWithAIButton";
 import { useLocalData } from "@/components/LocalDataProvider";
 import {
   LocalDataNotice,
@@ -289,6 +290,7 @@ export function DealLabWorkspace() {
                 onChange={(event) => setField("compEvidence", event.target.value)}
                 placeholder="Record real comparable sources, dates, and why they are relevant"
               />
+              <GenerateWithAIButton field="compEvidence" value={form.compEvidence} onGenerated={(value) => setField("compEvidence", value)} />
             </label>
             <label>
               <span>Repair evidence and range basis</span>
@@ -299,6 +301,7 @@ export function DealLabWorkspace() {
                 onChange={(event) => setField("repairEvidence", event.target.value)}
                 placeholder="Record walkthrough, contractor, scope, or other basis"
               />
+              <GenerateWithAIButton field="repairEvidence" value={form.repairEvidence} onGenerated={(value) => setField("repairEvidence", value)} />
             </label>
           </div>
           <label>
@@ -309,6 +312,7 @@ export function DealLabWorkspace() {
               onChange={(event) => setField("riskNotes", event.target.value)}
               placeholder="Name what could change the conclusion"
             />
+            <GenerateWithAIButton field="riskNotes" value={form.riskNotes} onGenerated={(value) => setField("riskNotes", value)} />
           </label>
         </form>
 

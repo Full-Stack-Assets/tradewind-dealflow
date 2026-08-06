@@ -1,6 +1,7 @@
 "use client";
 
 import { useLocalData } from "@/components/LocalDataProvider";
+import { GenerateWithAIButton } from "@/components/ai/GenerateWithAIButton";
 import {
   EmptyState,
   LocalDataNotice,
@@ -162,6 +163,7 @@ export function DealDeskWorkspace() {
                 onChange={(event) => patchDraft({ summary: event.target.value })}
                 placeholder="Summarize verified facts, assumptions, missing evidence, and the specific help requested. Minimize sensitive data."
               />
+              <GenerateWithAIButton field="dealDeskSummary" value={draft.summary} onGenerated={(value) => patchDraft({ summary: value })} disabled={!writesSupported} />
             </label>
             <div className="form-safety">
               <span aria-hidden="true">i</span>

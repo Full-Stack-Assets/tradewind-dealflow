@@ -3,6 +3,7 @@
 import { FormEvent, useCallback, useMemo, useState } from "react";
 
 import { useLocalData } from "@/components/LocalDataProvider";
+import { GenerateWithAIButton } from "@/components/ai/GenerateWithAIButton";
 import {
   EmptyState,
   LocalDataNotice,
@@ -740,6 +741,7 @@ export function SellerPropertyWorkspace() {
                   value={conversationForm.summary}
                   onChange={(event) => updateConversationField("summary", event.target.value)}
                 />
+                <GenerateWithAIButton field="conversationSummary" value={conversationForm.summary} onGenerated={(value) => updateConversationField("summary", value)} disabled={!writesSupported} />
               </label>
               <label>
                 <span>Next action *</span>
@@ -749,6 +751,7 @@ export function SellerPropertyWorkspace() {
                   value={conversationForm.nextAction}
                   onChange={(event) => updateConversationField("nextAction", event.target.value)}
                 />
+                <GenerateWithAIButton field="conversationNextAction" value={conversationForm.nextAction} onGenerated={(value) => updateConversationField("nextAction", value)} disabled={!writesSupported} />
               </label>
               <label>
                 <span>Follow-up timestamp (ISO) *</span>
@@ -788,6 +791,7 @@ export function SellerPropertyWorkspace() {
                   value={conversationForm.notes}
                   onChange={(event) => updateConversationField("notes", event.target.value)}
                 />
+                <GenerateWithAIButton field="conversationNotes" value={conversationForm.notes} onGenerated={(value) => updateConversationField("notes", value)} disabled={!writesSupported} />
               </label>
               <button className="button button-primary" type="submit" disabled={!writesSupported}>
                 Save conversation note
@@ -856,6 +860,7 @@ export function SellerPropertyWorkspace() {
                   value={taskForm.notes}
                   onChange={(event) => updateTaskField("notes", event.target.value)}
                 />
+                <GenerateWithAIButton field="taskNotes" value={taskForm.notes} onGenerated={(value) => updateTaskField("notes", value)} disabled={!writesSupported} />
               </label>
               <button className="button button-primary" type="submit" disabled={!writesSupported}>
                 Add task
@@ -914,6 +919,7 @@ export function SellerPropertyWorkspace() {
                   value={comparableForm.adjustmentNotes}
                   onChange={(event) => updateComparableField("adjustmentNotes", event.target.value)}
                 />
+                <GenerateWithAIButton field="comparableAdjustmentNotes" value={comparableForm.adjustmentNotes} onGenerated={(value) => updateComparableField("adjustmentNotes", value)} disabled={!writesSupported} />
               </label>
               <div className="form-grid three">
                 <label>
@@ -987,6 +993,7 @@ export function SellerPropertyWorkspace() {
                   value={repairForm.evidenceSummary}
                   onChange={(event) => updateRepairField("evidenceSummary", event.target.value)}
                 />
+                <GenerateWithAIButton field="repairEvidenceSummary" value={repairForm.evidenceSummary} onGenerated={(value) => updateRepairField("evidenceSummary", value)} disabled={!writesSupported} />
               </label>
               <div className="form-grid two">
                 <label>
@@ -1147,6 +1154,7 @@ export function SellerPropertyWorkspace() {
                   value={reviewDraftForm.summary}
                   onChange={(event) => updateReviewDraftField("summary", event.target.value)}
                 />
+                <GenerateWithAIButton field="reviewSummary" value={reviewDraftForm.summary} onGenerated={(value) => updateReviewDraftField("summary", value)} disabled={!writesSupported} />
               </label>
               <label>
                 <span>Include comparable IDs (comma or newline separated)</span>

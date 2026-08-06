@@ -3,6 +3,7 @@ import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } fr
 import handler from "vinext/server/app-router-entry";
 import { handleIngestionApi } from "../server/ingestion-api.ts";
 import { handleControlPlaneApi } from "../server/control-plane-api.ts";
+import { handleAiFieldGeneration } from "../server/ai-field-generation.ts";
 import { handleElevenLabsWebhook } from "../server/webhooks/elevenlabs.ts";
 import { runDuePolicies } from "../server/ingestion-scheduler.ts";
 import type { D1Database } from "../server/d1.ts";
@@ -19,6 +20,8 @@ interface Env {
     };
   };
   DB: D1Database;
+  OPENAI_API_KEY?: string;
+  OPENAI_MODEL?: string;
 }
 
 interface ExecutionContext {
@@ -39,6 +42,9 @@ const worker = {
     if (ingestionResponse) return ingestionResponse;
     const controlPlaneResponse = await handleControlPlaneApi(request, env);
     if (controlPlaneResponse) return controlPlaneResponse;
+    if (url.pathname === "/api/ai/field-generation") {
+      return handleAiFieldGeneration(request, env);
+    }
     if (url.pathname === "/api/webhooks/elevenlabs") {
       return handleElevenLabsWebhook(request, env);
     }

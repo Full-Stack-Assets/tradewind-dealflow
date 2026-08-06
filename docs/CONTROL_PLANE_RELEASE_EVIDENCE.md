@@ -32,6 +32,13 @@ provider receipt, legal approval, or production deployment receipt.
   enrichment contract. It is not connected to MassGIS ingestion.
 - `lib/xlsx.ts` generates a dependency-free XLSX export from the same
   owner/contact-safe allowlist used by CSV export.
+- `server/ai-field-generation.ts` exposes an authenticated, same-origin,
+  server-only OpenAI Responses API route with field allowlisting, bounded
+  input/output, common contact-pattern redaction, `store: false`, and strict
+  JSON-schema output validation.
+- `components/ai/GenerateWithAIButton.tsx` adds visible draft-generation
+  controls to material free-text fields. Generated text is inserted as an
+  editable draft and requires operator review before the existing save action.
 
 ## Configured-but-not externally verified
 
@@ -44,6 +51,8 @@ secret manager. They are intentionally absent from this repository:
 - `ELEVENLABS_WEBHOOK_SECRET`
 - `SKIP_TRACING_API_KEY`
 - `SKIP_TRACING_API_URL`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL` (optional)
 
 No local test uses a real credential. No live call, webhook delivery, or
 skip-tracing lookup was performed.
@@ -54,6 +63,9 @@ skip-tracing lookup was performed.
   MassGIS release.
 - MassGIS remains owner/contact-free and is the only default scheduled
   pipeline.
+- AI field generation is draft assistance only; it does not make qualification,
+  approval, outreach, legal, or underwriting decisions and remains unavailable
+  until `OPENAI_API_KEY` is provisioned through the secret manager.
 - Outbound code is available only through server-side authorization and fails
   closed when configuration, approvals, authority, evidence, or kill-switch
   conditions are missing.
@@ -78,11 +90,11 @@ skip-tracing lookup was performed.
 Run from the exact candidate checkout:
 
 ```text
-npm run test:unit       # 279 passed, 0 failed
+  npm run test:unit       # 283 passed, 0 failed
 npm run typecheck       # passed
 npm run lint             # passed; 3 pre-existing warnings in ingestion-runner.ts
 npm run build            # passed; Vinext reports known Node-import compatibility warnings
-npm run test:render      # 21 passed, 0 failed
+  npm run test:render      # 22 passed, 0 failed
 git diff --check         # passed
 ```
 

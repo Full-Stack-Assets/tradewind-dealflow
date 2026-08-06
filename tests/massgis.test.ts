@@ -103,6 +103,12 @@ test("page validation rejects malformed data before normalization", () => {
   );
 });
 
+test("accepts MassGIS compact YYYYMMDD sale dates", () => {
+  const page = { features: [feature({ LS_DATE: "20240403" })] };
+  assert.equal(validateMassGisPage(page, validPolicy()).length, 1);
+  assert.equal(normalizeMassGisRecord(page.features[0]).lastSaleDate, "2024-04-03T00:00:00.000Z");
+});
+
 test("official residential codes map without inventing motivation", () => {
   assert.equal(normalizeMassGisRecord(feature({ USE_CODE: "101" })).propertyType, "single-family homes");
   assert.equal(normalizeMassGisRecord(feature({ USE_CODE: "104" })).propertyType, "duplexes");

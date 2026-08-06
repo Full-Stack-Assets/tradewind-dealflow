@@ -36,8 +36,9 @@ smoke test, repository state, or Sites release state proved the claim.
 - [x] Restricted source rights and source-declared contact holds retain the
       contact block.
 - [x] Dashboard uses current real browser data and does not invent history.
-- [x] No seller, buyer, underwriting, provider, outreach, Academy, billing, AI,
-      contact enrichment, or public-marketplace work entered this increment.
+- [x] No seller, buyer, AI decisioning, provider execution, outreach, Academy,
+      billing, contact enrichment, or public-marketplace work entered this
+      increment; bounded editable AI drafting is separately fail-closed.
 - [x] D1 migration creates only policy, run, staged-record, and audit tables.
 - [x] Manual and scheduled triggers produce identical classifications.
 - [x] At least 100 safe records can be staged and imported in one action.

@@ -88,7 +88,7 @@
   not part of this release evidence.
 - No form sends outreach or creates a provider mutation.
 - No executable legal document or attorney-approved template is generated.
-- Cold automated SMS, prerecorded/AI voice, mass dialing, formal offers, public
+- Cold automated SMS, prerecorded/AI voice, mass dialing, AI decisioning, formal offers, public
   marketing, final buyer selection, sensitive sharing, money, and closing
   instructions remain disabled or outside the application.
 
@@ -120,7 +120,7 @@
    SQLAlchemy, Alembic, managed authentication, private storage,
    database-backed jobs, monitoring, and restricted audit history.
 
-Do not begin speculative AI, automated cold outreach, public marketplace,
+Do not begin speculative AI decisioning, automated cold outreach, public marketplace,
 advanced maps, multiple overlapping providers, native apps, billing,
 white-label, or public multi-tenant SaaS work before the core manual-assisted
 revenue loop demonstrates a real bottleneck.

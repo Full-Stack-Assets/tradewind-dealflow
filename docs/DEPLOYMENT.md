@@ -103,6 +103,13 @@ monitoring, property data, email, SMS, or voice services must use the
 deployment secret manager. Never place a credential in frontend code, git
 history, documentation, logs, health responses, screenshots, or project chat.
 
+The optional server-only AI drafting tool uses `OPENAI_API_KEY` and optional
+`OPENAI_MODEL`. It is limited to allowlisted editable notes, redacts common
+email and phone patterns before provider submission, requests `store: false`
+structured output, and never saves or executes a generated draft automatically.
+The route remains fail-closed until the key is provisioned through the
+deployment secret manager and the required compliance review is complete.
+
 The optional provider boundary uses server-only `ELEVENLABS_API_KEY`,
 `ELEVENLABS_AGENT_ID`, `ELEVENLABS_PHONE_ID`, `ELEVENLABS_WEBHOOK_SECRET`,
 `SKIP_TRACING_API_KEY`, and `SKIP_TRACING_API_URL`. Provisioning these values

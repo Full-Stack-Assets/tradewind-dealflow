@@ -67,7 +67,7 @@ test("generated deployment config omits the obsolete nodejs compatibility flag",
 
 const routes = [
   ["/dashboard", /Current operating snapshot/i, /Inspecting browser workspace/i],
-  ["/deal-lab", /Deal Lab/i, /ARV - Repairs - Holding\/Closing Costs - Buyer Profit - Wholesale Fee/i],
+  ["/deal-lab", /Deal Lab/i, /Generate with AI/i],
   ["/pipeline", /Pipeline/i, /Your pipeline is empty/i],
   ["/sources", /MassGIS standing policy/i, /Import all safe records/i],
   ["/approvals", /Approval Queue/i, /Hash-bound human review/i],
@@ -91,6 +91,16 @@ for (const [path, heading, requiredCopy] of routes) {
     assert.doesNotMatch(html, /123 Main St|Jane Seller|Acme Buyers|demo property|sample buyer/i);
   });
 }
+
+test("deal lab exposes reviewable AI drafting controls for material notes", async () => {
+  const response = await render("/deal-lab");
+  const html = await response.text();
+
+  assert.match(html, /Generate with AI/i);
+  assert.match(html, /data-ai-field="compEvidence"/i);
+  assert.match(html, /data-ai-field="repairEvidence"/i);
+  assert.match(html, /data-ai-field="riskNotes"/i);
+});
 
 test("compliance route separates Massachusetts and Rhode Island with official sources", async () => {
   const response = await render("/compliance");
