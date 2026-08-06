@@ -105,11 +105,11 @@ only.
 Run from the exact candidate checkout:
 
 ```text
-  npm run test:unit       # 283 passed, 0 failed
+  npm run test:unit       # 298 passed, 0 failed
 npm run typecheck       # passed
 npm run lint             # passed; 3 pre-existing warnings in ingestion-runner.ts
 npm run build            # passed; Vinext reports known Node-import compatibility warnings
-  npm run test:render      # 22 passed, 0 failed
+  npm run test:render      # 23 passed, 0 failed
 git diff --check         # passed
 ```
 
@@ -117,22 +117,26 @@ These results were recorded from the exact candidate checkout on 2026-08-06.
 Local success does not prove deployment, D1 migration application, or provider
 access.
 
-## Current private deployment receipt
+## Last private deployment receipt
 
-- Deployment status: succeeded on 2026-08-06.
+- Deployment status: succeeded on 2026-08-06 for the automated-lead candidate.
 - Production URL: `https://tradewind-dealflow.blaizexb.chatgpt.site`.
-- Deployed source SHA: `6a355c241b565af863058f40ee88db9904dfbf82`.
-- Saved Sites version: `11` (`appgprj_6a681e7c21f4819182043900ac4fd875~appgver_418f2c7c8ccc8191bf4da989cb5f9e68`).
-- Deployment ID: `appgdep_6a750d9c255c8191aa7b1d495ee946b1`.
+- Deployed source SHA: `13ee165f7d4f0608f585a5feda31ad25e0239323`.
+- Saved Sites version: `13` (`appgprj_6a681e7c21f4819182043900ac4fd875~appgver_b76a11726880819197c261786b992fa3`).
+- Deployment ID: `appgdep_6a751a0c4c8c8191a880f6db008e47d3`.
 - Provider deployment ID: `blaizexb--tradewind-dealflow`.
 - The deployed archive contained `dist/.openai/drizzle/0000_massgis_ingestion.sql`,
-  `0001_harden_ingestion_runs.sql`, and `0002_control_plane.sql`, plus the
-  logical `DB` binding in `.openai/hosting.json`.
+  `0001_harden_ingestion_runs.sql`, `0002_control_plane.sql`, and
+  `0003_automated_leads.sql`, plus the logical `DB` binding and hourly
+  `0 * * * *` trigger in the generated worker configuration.
 - The deployment remains private. Anonymous edge requests, including `/healthz`
-  and `/api/ai/field-generation`, correctly return the Sites sign-in gate with
-  HTTP 401. Owner-session route checks and authenticated D1 reads remain
-  pending the owner-session verification gate.
+  `/api/leads`, and `/pipeline`, correctly returned the Sites sign-in gate with
+  HTTP 401. Owner-session route checks, authenticated D1 reads, and real D1
+  migration/cron receipts remain pending the owner-session verification gate.
 - An identity-less Sites bypass cannot forward the signed-in user headers used
   by the D1 API routes, so live authenticated API reads and the provider-side
   migration/cron receipts remain pending owner-session verification. No claim
   of live D1 mutation or hourly execution is made from this receipt.
+- Sites runtime environment revision is `0` with no entries. `RENTCAST_API_KEY`
+  has not been provisioned, so live RentCast retrieval remains disabled and
+  unverified.
