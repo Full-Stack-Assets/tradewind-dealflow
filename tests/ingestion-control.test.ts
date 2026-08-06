@@ -33,11 +33,19 @@ function validPolicy(overrides: Partial<SourcePolicy> = {}): SourcePolicy {
   };
 }
 
-test("migration creates only the four ingestion tables", async (t) => {
+test("migrations create the MassGIS and control-plane tables", async (t) => {
   const db = await createTestD1();
   t.after(() => closeTestD1(db));
   assert.deepEqual(await tableNames(db), [
     "audit_events",
+    "control_plane_actions",
+    "control_plane_approval_decisions",
+    "control_plane_approval_requests",
+    "control_plane_authorities",
+    "control_plane_envelopes",
+    "control_plane_idempotency_claims",
+    "control_plane_ledger_events",
+    "control_plane_webhook_events",
     "ingestion_runs",
     "source_policies",
     "source_records",

@@ -75,14 +75,17 @@
 - No fast-track buyer CSV, minimal verified-buyer workflow, document
   verification, or launch buyer-match engine is implemented. The existing
   local Buyers page is not a substitute for that milestone.
-- No unified Approval Queue, attorney/seller/buyer package, immutable audit
-  history, closing checklist, projected-versus-realized reconciliation, or
-  closed-deal archive is implemented.
+- The D1-backed Approval Queue now covers hash-bound control-plane requests and
+  decisions, but attorney/seller/buyer packages, closing checklists,
+  projected-versus-realized reconciliation, and closed-deal archives remain
+  unimplemented.
 
 ### External actions
 
-- No CRM, seller form, buyer form, email, SMS, voice, direct
-  mail, payment, banking, title, or closing provider is connected.
+- No CRM, seller form, buyer form, email, SMS, direct mail, payment, banking,
+  title, or closing provider is connected. The ElevenLabs adapter and webhook
+  boundary exist, but live provider configuration and external verification are
+  not part of this release evidence.
 - No form sends outreach or creates a provider mutation.
 - No executable legal document or attorney-approved template is generated.
 - Cold automated SMS, prerecorded/AI voice, mass dialing, formal offers, public
@@ -105,10 +108,10 @@
 2. **Minimal buyer engine** — real buyer entry/CSV, verification date and
    proof-of-funds status, narrow buy boxes, seven-factor matching, reasons, and
    conflicts.
-3. **Unified Approval Queue and deal package** — one review surface for first
-   contact, offers, contract preparation, buyer marketing/selection, sensitive
-   sharing, and closing instructions; export seller, attorney, and buyer
-   summaries.
+3. **Deal-package approval expansion** — extend the existing hash-bound
+   control-plane queue to cover first-contact, offers, contract preparation,
+   buyer marketing/selection, sensitive sharing, and closing instructions;
+   export seller, attorney, and buyer summaries.
 4. **Closing and realized results** — checklist, dates, professionals,
    projected economics, realized income/costs, final margin, and archive.
 5. **One controlled integration** — select the single provider that removes a

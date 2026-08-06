@@ -934,6 +934,12 @@ export function parseImportText(text: string, now = new Date()): ImportResult {
 
 export function serializeData(data: DealFlowData): string { return `${JSON.stringify(data, null, 2)}\n`; }
 
+export const PIPELINE_EXPORT_HEADERS = ["State", "Property address", "City", "ZIP", "Property type", "Source", "Owner contact status", "Stage", "Asking price", "Next action", "Notes"] as const;
+
+export function pipelineExportRows(deals: DealRecord[]): Array<Array<string | number | null>> {
+  return deals.map((deal) => [deal.state, deal.address, deal.city, deal.zip, deal.propertyType, deal.source, deal.ownerContactStatus, deal.stage, deal.askingPrice, deal.nextAction, deal.notes]);
+}
+
 function csvCell(value: string | number | null): string {
   const text = value === null ? "" : String(value);
   const safeText = /^[=+\-@]/.test(text) ? `'${text}` : text;
@@ -941,7 +947,5 @@ function csvCell(value: string | number | null): string {
 }
 
 export function serializePipelineCsv(deals: DealRecord[]): string {
-  const header = ["State", "Property address", "City", "ZIP", "Property type", "Source", "Owner contact status", "Stage", "Asking price", "Next action", "Notes"];
-  const rows = deals.map((deal) => [deal.state, deal.address, deal.city, deal.zip, deal.propertyType, deal.source, deal.ownerContactStatus, deal.stage, deal.askingPrice, deal.nextAction, deal.notes]);
-  return [header, ...rows].map((row) => row.map((value) => csvCell(value)).join(",")).join("\n");
+  return [PIPELINE_EXPORT_HEADERS, ...pipelineExportRows(deals)].map((row) => row.map((value) => csvCell(value)).join(",")).join("\n");
 }

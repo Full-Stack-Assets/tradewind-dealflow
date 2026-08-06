@@ -18,11 +18,12 @@ import {
   WorkspaceHeader,
 } from "@/components/WorkspaceShell";
 import { SourceHealthStrip } from "@/components/workspaces/SourceHealthStrip";
-import { downloadText } from "@/lib/download";
+import { downloadBlob, downloadText } from "@/lib/download";
 import {
   serializeData,
   serializePipelineCsv,
 } from "@/lib/import-export";
+import { serializePipelineXlsx } from "@/lib/xlsx";
 import {
   readWorkspaceBackup,
   shouldOfferWorkspaceClear,
@@ -140,6 +141,17 @@ export function PipelineWorkspace() {
             }
           >
             Export property CSV
+          </button>
+          <button
+            className="button button-quiet button-small"
+            type="button"
+            disabled={data.deals.length === 0}
+            onClick={() => {
+              const bytes = serializePipelineXlsx(data.deals);
+              downloadBlob("tradewind-pipeline.xlsx", new Blob([bytes.buffer as ArrayBuffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+            }}
+          >
+            Export property XLSX
           </button>
           <button
             className="button button-quiet button-small"

@@ -32,7 +32,9 @@ An operator can:
   research task;
 - see a current dashboard snapshot with five launch qualification statuses
   and the Task 5 research-priority order; and
-- export and restore the full versioned workspace as JSON.
+- export and restore the full versioned workspace as JSON;
+- create and review hash-bound approval requests in the Approval Queue; and
+- export the owner/contact-safe property pipeline as CSV or XLSX.
 
 Every imported property begins in `Research`. No score authorizes contact,
 marketing, an offer, a contract, sensitive disclosure, final buyer selection,
@@ -41,10 +43,11 @@ money, or closing instructions.
 ## Deliberate boundary
 
 Working Pipeline records are stored under the versioned browser key
-`tradewind-dealflow:v2`. A four-table D1 control plane stores only the approved
-MassGIS policy, runs, owner/contact-free staged parcel records, and append-only
-audit events. There is no multi-device workspace sync, server-side Pipeline
-backup, seller/contact provider connection, or outreach send. Clearing browser
+`tradewind-dealflow:v2`. D1 stores the MassGIS control plane, hash-bound
+approval records, provider webhook receipts, and append-only audit events.
+There is no multi-device workspace sync or server-side Pipeline backup.
+Provider adapters are server-only and approval-gated; `/healthz` continues to
+report outreach disabled for the current MassGIS release. Clearing browser
 storage can erase the only working Pipeline copy.
 
 The existing Deal Lab and Buyers routes remain local educational utilities.
@@ -93,6 +96,7 @@ commit promotion, and private production health verification are tracked in
 | `/dashboard` | Current buy-box, qualification, research, block, and storage snapshot |
 | `/pipeline` | Buy-box configuration, local CSV preview/apply, provenance review, and backup |
 | `/sources` | MassGIS policy approval, manual/scheduled runs, safe intake, exceptions, and audit |
+| `/approvals` | Hash-bound human approval requests and decisions |
 | `/compliance` | Educational state lanes and planning-only controls |
 | `/healthz` | Declares the acquisitions OS release, optional ingestion capability, and disabled outreach state |
 

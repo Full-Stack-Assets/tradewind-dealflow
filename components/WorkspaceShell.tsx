@@ -12,6 +12,7 @@ const navigation = [
   { href: "/deal-lab", label: "Deal Lab", glyph: "◇" },
   { href: "/pipeline", label: "Pipeline", glyph: "↗" },
   { href: "/sources", label: "Sources", glyph: "◫" },
+  { href: "/approvals", label: "Approvals", glyph: "✓" },
   { href: "/buyers", label: "Buyers", glyph: "◎" },
   { href: "/seller-property", label: "Seller/Property", glyph: "◉" },
   { href: "/academy", label: "Academy", glyph: "▤" },

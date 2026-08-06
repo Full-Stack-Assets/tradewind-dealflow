@@ -2,6 +2,8 @@
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
 import { handleIngestionApi } from "../server/ingestion-api.ts";
+import { handleControlPlaneApi } from "../server/control-plane-api.ts";
+import { handleElevenLabsWebhook } from "../server/webhooks/elevenlabs.ts";
 import { runDuePolicies } from "../server/ingestion-scheduler.ts";
 import type { D1Database } from "../server/d1.ts";
 
@@ -35,6 +37,11 @@ const worker = {
     const url = new URL(request.url);
     const ingestionResponse = await handleIngestionApi(request, env);
     if (ingestionResponse) return ingestionResponse;
+    const controlPlaneResponse = await handleControlPlaneApi(request, env);
+    if (controlPlaneResponse) return controlPlaneResponse;
+    if (url.pathname === "/api/webhooks/elevenlabs") {
+      return handleElevenLabsWebhook(request, env);
+    }
 
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];

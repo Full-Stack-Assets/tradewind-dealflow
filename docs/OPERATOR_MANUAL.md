@@ -150,11 +150,17 @@ Source-derived restrictions cannot be deleted or directly resolved there.
 - [ ] Export a JSON backup after material changes.
 - [ ] Record legal or professional questions for the appropriate reviewer.
 
-## Actions outside this milestone
+## Control-plane approvals
 
-Seller engagement, a defensible evidence-ranged underwriting case, verified
-buyer intake and matching, a unified Approval Queue, closing coordination, and
-realized economics are later fast-track milestones. Manual work outside the
+The D1-backed Approval Queue is available at `/approvals` for control-plane
+requests created by the application. Before deciding a request, confirm the
+envelope hash, action scope, evidence, authority, expiry, and separation of
+duties. A decision is valid only for the exact envelope hash shown in the
+request; envelope mutation invalidates the request and requires a new review.
+
+The queue is an approval record, not a substitute for legal or compliance
+review. Seller engagement, buyer intake and matching, closing coordination,
+and realized economics remain outside this milestone. Manual work outside the
 app remains subject to company policy, data rights, counsel review, and the
 human approval gates described in
 [Compliance review](COMPLIANCE_REVIEW_CHECKLIST.md).

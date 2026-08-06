@@ -70,6 +70,7 @@ const routes = [
   ["/deal-lab", /Deal Lab/i, /ARV - Repairs - Holding\/Closing Costs - Buyer Profit - Wholesale Fee/i],
   ["/pipeline", /Pipeline/i, /Your pipeline is empty/i],
   ["/sources", /MassGIS standing policy/i, /Import all safe records/i],
+  ["/approvals", /Approval Queue/i, /Hash-bound human review/i],
   ["/buyers", /Buyer workspace/i, /No buyer profiles yet/i],
   ["/seller-property", /Seller\/Property Workspace/i, /Drafts unpublished/i],
   ["/academy", /Academy/i, /12 learning modules/i],
@@ -86,7 +87,7 @@ for (const [path, heading, requiredCopy] of routes) {
     assert.match(html, heading);
     assert.match(html, requiredCopy);
     assert.match(html, /Skip to main content/i);
-    assert.match(html, /stored only in this browser/i);
+    assert.match(html, /stored only in this browser|Execution remains fail-closed/i);
     assert.doesNotMatch(html, /123 Main St|Jane Seller|Acme Buyers|demo property|sample buyer/i);
   });
 }
@@ -122,6 +123,7 @@ test("pipeline renders the local lead engine and hard action boundaries", async 
   assert.match(html, /The selected file stays in this browser/i);
   assert.match(html, /Apply safe records/i);
   assert.match(html, /A score never authorizes contact/i);
+  assert.match(html, /Export property XLSX/i);
   assert.match(html, /No real property records yet/i);
   assert.doesNotMatch(
     html,

@@ -16,10 +16,11 @@ npm run dev
 ```
 
 No MassGIS credential is required. The deployment must provide logical D1
-binding `DB`, apply `drizzle/0000_massgis_ingestion.sql`, and register hourly
-cron `0 * * * *`. Do not add secrets, private email
-addresses, seller records, buyer records, or production exports to source
-control.
+binding `DB`, apply `drizzle/0000_massgis_ingestion.sql`,
+`drizzle/0001_harden_ingestion_runs.sql`, and
+`drizzle/0002_control_plane.sql`, and register hourly cron `0 * * * *`. Do
+not add secrets, private email addresses, seller records, buyer records, or
+production exports to source control.
 
 ## Release verification
 
@@ -96,12 +97,17 @@ unless the owner explicitly authorizes an access-policy change.
 
 ## Secrets and external services
 
-This milestone has no application secret; MassGIS is a public query-only
-provider. Future
-authentication, PostgreSQL, object storage, monitoring, property data, email,
-SMS, or voice services must use the deployment secret manager. Never place a
-credential in frontend code, git history, documentation, logs, health
-responses, screenshots, or project chat.
+This milestone has no required application secret; MassGIS is a public
+query-only provider. Future authentication, PostgreSQL, object storage,
+monitoring, property data, email, SMS, or voice services must use the
+deployment secret manager. Never place a credential in frontend code, git
+history, documentation, logs, health responses, screenshots, or project chat.
+
+The optional provider boundary uses server-only `ELEVENLABS_API_KEY`,
+`ELEVENLABS_AGENT_ID`, `ELEVENLABS_PHONE_ID`, `ELEVENLABS_WEBHOOK_SECRET`,
+`SKIP_TRACING_API_KEY`, and `SKIP_TRACING_API_URL`. Provisioning these values
+does not replace counsel approval, envelope authorization, or provider sandbox
+verification.
 
 ## Rollback
 
