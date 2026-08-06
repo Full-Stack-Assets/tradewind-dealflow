@@ -17,7 +17,12 @@ export function requiredSecret(value: string | undefined, name: string): string 
 }
 
 export function isRentCastActivated(env: ProviderEnvironment): boolean {
+  const markets = new Set((env.RENTCAST_ALLOWED_MARKETS ?? "")
+    .split(",")
+    .map((market) => market.trim().toUpperCase())
+    .filter(Boolean));
   return Boolean(env.RENTCAST_API_KEY?.trim())
     && env.RENTCAST_ENABLED?.trim().toLowerCase() === "true"
-    && env.RENTCAST_DATA_USE_APPROVAL?.trim().toLowerCase() === "approved";
+    && env.RENTCAST_DATA_USE_APPROVAL?.trim().toLowerCase() === "approved"
+    && markets.has("MA");
 }

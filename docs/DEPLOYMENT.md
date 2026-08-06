@@ -120,7 +120,8 @@ does not replace counsel approval, envelope authorization, or provider sandbox
 verification.
 
 The selected owner-data adapter uses server-only `RENTCAST_API_KEY` plus
-`RENTCAST_ENABLED=true` and `RENTCAST_DATA_USE_APPROVAL=approved`. Add these
+`RENTCAST_ENABLED=true`, `RENTCAST_ALLOWED_MARKETS=MA`, and
+`RENTCAST_DATA_USE_APPROVAL=approved`. Add these
 only through the private Sites deployment secret manager after the provider
 account, terms, and compliance review are complete. Never add the key to Git,
 local test fixtures, frontend code, logs, or chat. RentCast enrichment remains

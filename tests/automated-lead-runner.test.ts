@@ -82,7 +82,7 @@ test("activated RentCast enrichment is matched and persisted without retaining p
   t.after(() => closeTestD1(db));
   const approved = await approvePolicy(db, policy(), "operator", NOW);
   const result = await runAutomatedLeadCycle({
-    env: { DB: db, RENTCAST_API_KEY: "test-only-not-a-real-key", RENTCAST_ENABLED: "true", RENTCAST_DATA_USE_APPROVAL: "approved" },
+    env: { DB: db, RENTCAST_API_KEY: "test-only-not-a-real-key", RENTCAST_ENABLED: "true", RENTCAST_ALLOWED_MARKETS: "MA", RENTCAST_DATA_USE_APPROVAL: "approved" },
     policy: approved,
     organizationId: "org-a",
     actorId: "scheduler",

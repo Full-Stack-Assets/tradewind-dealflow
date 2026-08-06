@@ -1,6 +1,6 @@
 import { getAutomatedLead, listAutomatedLeads } from "./automated-lead-store.ts";
 import type { D1Bindings } from "./d1.ts";
-import type { ProviderEnvironment } from "./providers/provider-config.ts";
+import { isRentCastActivated, type ProviderEnvironment } from "./providers/provider-config.ts";
 
 type AutomatedLeadApiEnvironment = D1Bindings & ProviderEnvironment & {
   DEALFLOW_ORGANIZATION_ID?: string;
@@ -70,9 +70,7 @@ export async function handleAutomatedLeadApi(
   try {
     if (request.method === "GET" && url.pathname === "/api/leads/health") {
       await env.DB.prepare("SELECT 1 FROM automated_leads LIMIT 1").first<{ 1: number }>();
-      const providerActivated = Boolean(env.RENTCAST_API_KEY?.trim())
-        && env.RENTCAST_ENABLED?.trim().toLowerCase() === "true"
-        && env.RENTCAST_DATA_USE_APPROVAL?.trim().toLowerCase() === "approved";
+      const providerActivated = isRentCastActivated(env);
       return json({
         leadAutomation: "available",
         source: "massgis",
