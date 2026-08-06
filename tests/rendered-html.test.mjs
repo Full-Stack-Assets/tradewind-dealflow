@@ -59,6 +59,17 @@ test("public responses carry baseline browser security headers", async () => {
   );
 });
 
+test("workspace shell keeps the primary navigation to five focused choices", async () => {
+  const response = await render("/dashboard");
+  const html = await response.text();
+  assert.equal((html.match(/class="nav-link(?: active)?"/g) ?? []).length, 5);
+  assert.match(html, /Start here/i);
+  assert.match(html, /Sources/i);
+  assert.match(html, /Pipeline/i);
+  assert.match(html, /Deal work/i);
+  assert.match(html, /Reference/i);
+});
+
 test("generated deployment config omits the obsolete nodejs compatibility flag", async () => {
   const config = JSON.parse(await readFile(wranglerConfigUrl, "utf8"));
   assert.equal(config.compatibility_date, "2026-08-04");

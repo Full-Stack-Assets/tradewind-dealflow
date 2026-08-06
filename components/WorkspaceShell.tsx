@@ -8,17 +8,11 @@ import { Brand } from "./Brand";
 import { LocalDataProvider, useLocalData } from "./LocalDataProvider";
 
 const navigation = [
-  { href: "/dashboard", label: "Dashboard", glyph: "⌂" },
-  { href: "/deal-lab", label: "Deal Lab", glyph: "◇" },
-  { href: "/pipeline", label: "Pipeline", glyph: "↗" },
+  { href: "/dashboard", label: "Start here", glyph: "⌂" },
   { href: "/sources", label: "Sources", glyph: "◫" },
-  { href: "/approvals", label: "Approvals", glyph: "✓" },
-  { href: "/buyers", label: "Buyers", glyph: "◎" },
-  { href: "/seller-property", label: "Seller/Property", glyph: "◉" },
-  { href: "/academy", label: "Academy", glyph: "▤" },
-  { href: "/compliance", label: "Compliance", glyph: "✓" },
-  { href: "/resources", label: "Resources", glyph: "⌘" },
-  { href: "/deal-desk", label: "Deal Desk", glyph: "□" },
+  { href: "/pipeline", label: "Pipeline", glyph: "↗" },
+  { href: "/seller-property", label: "Deal work", glyph: "◉" },
+  { href: "/resources", label: "Reference", glyph: "⌘" },
 ] as const;
 
 export function WorkspaceShell({ children }: { children: ReactNode }) {
