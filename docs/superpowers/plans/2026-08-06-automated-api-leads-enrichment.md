@@ -2,15 +2,15 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace browser-only manual lead import/export with a D1-backed scheduled pipeline that retrieves owner-free MassGIS parcel candidates, optionally enriches approved records through the official DealMachine API, and exposes one concise operator review surface.
+**Goal:** Replace browser-only manual lead import/export with a D1-backed scheduled pipeline that retrieves owner-free MassGIS parcel candidates, optionally enriches approved records through the official RentCast API, and exposes one concise operator review surface.
 
-**Architecture:** MassGIS remains the authoritative parcel source. A scheduled D1 worker run stages and deduplicates records, then a separately configured DealMachine adapter performs provider-neutral property/people enrichment only when its server-side key, policy, and legal activation flag are present. D1 becomes the server system of record for lead records and enrichment provenance; the browser becomes a read/review surface and no longer requires CSV upload or manual retyping.
+**Architecture:** MassGIS remains the authoritative parcel source. A scheduled D1 worker run stages and deduplicates records, then a separately configured RentCast adapter performs provider-neutral property/owner enrichment only when its server-side key, policy, and legal activation flag are present. D1 becomes the server system of record for lead records and enrichment provenance; the browser becomes a read/review surface and no longer requires CSV upload or manual retyping.
 
-**Tech Stack:** Cloudflare Worker, D1/SQLite migrations, TypeScript, existing MassGIS ArcGIS adapter, DealMachine REST API (`https://api.v2.dealmachine.com/v1`), React/Vinext, existing provenance/audit helpers, Node test runner.
+**Tech Stack:** Cloudflare Worker, D1/SQLite migrations, TypeScript, existing MassGIS ArcGIS adapter, RentCast REST API (`https://api.rentcast.io/v1/properties`), React/Vinext, existing provenance/audit helpers, Node test runner.
 
 ## Global Constraints
 
-- Keep `DEALMACHINE_API_KEY` and any provider secrets out of Git, tests with real values, logs, UI, and chat.
+- Keep `RENTCAST_API_KEY` and any provider secrets out of Git, tests with real values, logs, UI, and chat.
 - Preserve owner/contact-free MassGIS requests and source provenance; owner fields may enter D1 only from the configured enrichment provider and must be redacted from exports until a separate approved export policy exists.
 - No automated calling, texting, emailing, direct mail, contract generation, or outreach authorization is introduced.
 - Enrichment is disabled unless the deployment secret, provider activation flag, allowed geography, and compliance activation receipt are present; missing configuration returns a safe unavailable state.
@@ -29,13 +29,13 @@
 
 **Interfaces:**
 - Produces `AutomatedLeadRecord`, `OwnerEnrichment`, `EnrichmentAttempt`, and `LeadSourcePolicy` types used by D1 storage, provider adapters, and API responses.
-- Produces `normalizeDealMachineProperty(value: unknown): AutomatedLeadRecord | null` and `normalizeDealMachinePerson(value: unknown): OwnerEnrichment | null`.
+- Produces bounded RentCast property and owner normalizers. RentCast owner names, owner type, mailing address, and occupancy are retained when present; phone/email fields are not invented when the property response does not provide them.
 
-- [ ] **Step 1: Write failing tests** for required provenance, rejection of owner fields in MassGIS candidates, normalization of DealMachine property/people envelopes, and absence of provider secrets from serialized records.
-- [ ] **Step 2: Run the focused test** with `node --experimental-strip-types --test tests/automated-lead-contracts.test.ts` and confirm failure because the contracts do not exist.
-- [ ] **Step 3: Implement bounded contracts** with explicit source IDs, address matching keys, provider IDs, enrichment status, confidence/unknown values, and no arbitrary JSON passthrough.
-- [ ] **Step 4: Run the focused test** and confirm it passes.
-- [ ] **Step 5: Commit** with `git add lib/automation lib/ingestion/contracts.ts tests/automated-lead-contracts.test.ts && git commit -m "feat: define automated lead contracts"`.
+- [x] **Step 1: Write tests** for required provenance, normalization of RentCast property envelopes, owner-field bounds, and absence of provider secrets from serialized records.
+- [x] **Step 2: Run the focused test** with `node --experimental-strip-types --test tests/automated-lead-contracts.test.ts`.
+- [x] **Step 3: Implement bounded contracts** with explicit provider IDs and no arbitrary JSON passthrough.
+- [x] **Step 4: Run the focused tests** and confirm they pass.
+- [ ] **Step 5: Commit** the RentCast contract and provider adapter after the focused provider tests pass.
 
 ### Task 2: Add additive D1 tables for canonical leads and enrichment provenance
 
@@ -57,23 +57,24 @@
 - [ ] **Step 5: Run migration reconciliation and focused tests**; confirm no existing migration changes and all store tests pass.
 - [ ] **Step 6: Commit** with `git add drizzle server/automated-lead-store.ts server/d1.ts tests/automated-lead-store.test.ts && git commit -m "feat: persist automated leads in D1"`.
 
-### Task 3: Implement the official DealMachine provider adapter
+### Task 3: Implement the official RentCast provider adapter
 
 **Files:**
-- Create: `server/providers/dealmachine.ts`
+- Create: `server/providers/rentcast.ts`
 - Modify: `server/providers/provider-config.ts`
-- Test: `tests/dealmachine-provider.test.ts`
+- Test: `tests/rentcast-provider.test.ts`
 
 **Interfaces:**
-- Produces `createDealMachineProvider(env, fetcher)` with `searchProperties(input)` and `searchPeople(input)` methods implementing the existing provider-neutral enrichment boundary.
-- Uses `POST /v1/properties/search` and `POST /v1/people/search` with `Authorization: Bearer <server secret>`, bounded `per_page <= 250`, explicit field selection, and strict response normalization.
+- Produces `createRentCastProvider(env, fetcher)` with bounded `searchProperties(input)` implementing the provider-neutral enrichment boundary.
+- Uses `GET https://api.rentcast.io/v1/properties` with `X-Api-Key: <server secret>`, bounded `limit <= 500`, explicit location parameters, pagination, and strict response normalization.
+- Does not claim phone/email enrichment from the RentCast property response; a later provider can implement the existing provider-neutral contact contract if separately approved.
 
-- [ ] **Step 1: Write failing tests** for request URL/auth/header shape, allowed Fall River/New Bedford locations, bounded page size, pagination, response normalization, 401/429/5xx behavior, and provider credit metadata handling.
-- [ ] **Step 2: Run the focused test** and confirm failure because the adapter is absent.
-- [ ] **Step 3: Implement the adapter** against the official API contract, never logging the key or raw owner response, and returning generic safe errors to callers.
-- [ ] **Step 4: Add retry classification**: one bounded retry for 408/429/5xx with `Retry-After` capped to the worker budget; no retry for 400/401/403.
-- [ ] **Step 5: Run focused provider tests** with mocked responses only and confirm all pass.
-- [ ] **Step 6: Commit** with `git add server/providers tests/dealmachine-provider.test.ts && git commit -m "feat: add DealMachine enrichment adapter"`.
+- [x] **Step 1: Write tests** for request URL/auth/header shape, bounded page size, location validation, response normalization, and 401/503 behavior.
+- [x] **Step 2: Run the focused test** with mocked responses.
+- [x] **Step 3: Implement the adapter** against the official API contract, never logging the key or raw owner response, and returning generic safe errors to callers.
+- [x] **Step 4: Add retry classification**: one bounded retry for 408/429/5xx with `Retry-After` capped to the worker budget; no retry for 400/401/403.
+- [x] **Step 5: Run focused provider tests** with mocked responses only and confirm all pass.
+- [ ] **Step 6: Commit** with `git add server/providers tests/rentcast-provider.test.ts && git commit -m "feat: add RentCast enrichment adapter"`.
 
 ### Task 4: Automate MassGIS retrieval, enrichment, and D1 upsert
 
@@ -129,7 +130,7 @@
 - Test: `tests/healthz.test.ts` or the existing health test file
 
 **Interfaces:**
-- Adds optional `DEALMACHINE_API_KEY`, `DEALMACHINE_ENABLED`, `DEALMACHINE_ALLOWED_MARKETS`, and `DEALMACHINE_DATA_USE_APPROVAL` server-only configuration.
+- Adds optional `RENTCAST_API_KEY`, `RENTCAST_ENABLED`, `RENTCAST_ALLOWED_MARKETS`, and `RENTCAST_DATA_USE_APPROVAL` server-only configuration.
 - `/healthz` reports `leadAutomation: "configured" | "available" | "disabled"` and `ownerEnrichment: "disabled" | "configured" | "available"` without exposing secret presence details beyond safe status.
 
 - [ ] **Step 1: Write failing tests** for all configuration combinations and fail-closed health output.
@@ -145,7 +146,7 @@
 - [ ] **Step 1: Run `npm run test:unit`, `npm run typecheck`, `npm run lint`, `npm run build`, `npm run test:render`, and `git diff --check`.
 - [ ] **Step 2: Inspect the archive** for `dist/server/index.js`, `dist/.openai/hosting.json`, `dist/.openai/drizzle/0003_automated_leads.sql`, and the hourly cron declaration.
 - [ ] **Step 3: Push the exact SHA** to GitHub and the existing Sites source repository.
-- [ ] **Step 4: Save and deploy one private Sites version; do not provision `DEALMACHINE_API_KEY` in this step.
+- [ ] **Step 4: Save and deploy one private Sites version; provision `RENTCAST_API_KEY` only through the deployment secret manager after compliance approval.
 - [ ] **Step 5: Verify owner-session `/healthz`, authenticated `/api/leads`, migration receipts, cron registration, and anonymous 401 behavior.
 - [ ] **Step 6: Record deployment SHA, version, migration receipt, cron receipt, rollback version, and the fact that live enrichment remains unverified until the secret and compliance activation receipt exist.
 

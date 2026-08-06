@@ -2,59 +2,101 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  normalizeDealMachinePerson,
-  normalizeDealMachineProperty,
+  normalizeRentCastOwner,
+  normalizeRentCastProperties,
+  normalizeRentCastProperty,
 } from "../lib/automation/lead-contracts.ts";
 
-test("normalizes an official provider property envelope without retaining arbitrary fields", () => {
-  const result = normalizeDealMachineProperty({
-    data: {
-      dm_property_id: "prop_123",
-      address: "123 Main Street",
-      city: "Fall River",
-      state: "MA",
-      zip: "02720",
-      estimated_value: 245000,
-      owner_name: "Example Family Trust",
-      secret_provider_field: "do not retain",
+test("normalizes a RentCast property record and retains only approved owner facts", () => {
+  const result = normalizeRentCastProperty({
+    id: "rentcast_123",
+    formattedAddress: "123 Main Street, Fall River, MA 02720",
+    addressLine1: "123 Main Street",
+    city: "Fall River",
+    state: "ma",
+    zipCode: "02720",
+    estimatedValue: 245000,
+    owner: {
+      names: ["Example Family Trust"],
+      type: "Trust",
+      mailingAddress: {
+        addressLine1: "PO Box 10",
+        city: "Boston",
+        state: "MA",
+        zipCode: "02108",
+      },
     },
+    ownerOccupied: false,
+    privateNotes: "do not retain",
   });
 
   assert.deepEqual(result, {
-    provider: "dealmachine",
-    providerPropertyId: "prop_123",
+    provider: "rentcast",
+    providerPropertyId: "rentcast_123",
     address: "123 Main Street",
     city: "Fall River",
     state: "MA",
     zip: "02720",
     estimatedValue: 245000,
-    ownerName: "Example Family Trust",
-  });
-});
-
-test("normalizes people data into explicit contact fields and preserves unknowns", () => {
-  const result = normalizeDealMachinePerson({
-    data: {
-      dm_person_id: "person_123",
-      full_name: "Example Owner",
-      phones: [{ number: "+15085550123", type: "mobile" }],
-      emails: [{ address: "owner@example.com" }],
-      dnc: true,
-      private_notes: "do not retain",
+    ownerNames: ["Example Family Trust"],
+    ownerType: "Trust",
+    ownerMailingAddress: {
+      addressLine1: "PO Box 10",
+      addressLine2: null,
+      city: "Boston",
+      state: "MA",
+      zipCode: "02108",
     },
-  });
-
-  assert.deepEqual(result, {
-    provider: "dealmachine",
-    providerPersonId: "person_123",
-    ownerName: "Example Owner",
-    phones: ["+15085550123"],
-    emails: ["owner@example.com"],
-    dnc: true,
+    ownerOccupied: false,
   });
 });
 
-test("rejects malformed or owner-free records rather than inventing identity", () => {
-  assert.equal(normalizeDealMachineProperty({ data: { address: "123 Main Street" } }), null);
-  assert.equal(normalizeDealMachinePerson({ data: { dm_person_id: "person_123" } }), null);
+test("normalizes a bounded property collection and does not invent contacts", () => {
+  const result = normalizeRentCastProperties([
+    {
+      id: "rentcast_123",
+      addressLine1: "123 Main Street",
+      city: "Fall River",
+      state: "MA",
+      zipCode: "02720",
+      owner: { names: ["Example Owner"] },
+    },
+    { id: "missing-location", city: "Fall River" },
+  ]);
+
+  assert.deepEqual(result, [{
+    provider: "rentcast",
+    providerPropertyId: "rentcast_123",
+    address: "123 Main Street",
+    city: "Fall River",
+    state: "MA",
+    zip: "02720",
+    estimatedValue: null,
+    ownerNames: ["Example Owner"],
+    ownerType: null,
+    ownerMailingAddress: null,
+    ownerOccupied: null,
+  }]);
+  assert.equal("phones" in (result[0] ?? {}), false);
+  assert.equal("emails" in (result[0] ?? {}), false);
+});
+
+test("owner normalization is explicit and malformed records are rejected", () => {
+  assert.deepEqual(normalizeRentCastOwner({
+    id: "rentcast_123",
+    addressLine1: "123 Main Street",
+    city: "Fall River",
+    state: "MA",
+    zipCode: "02720",
+    owner: { names: ["Example Owner"], type: "Individual" },
+  }), {
+    provider: "rentcast",
+    providerPropertyId: "rentcast_123",
+    ownerNames: ["Example Owner"],
+    ownerType: "Individual",
+    ownerMailingAddress: null,
+    ownerOccupied: null,
+  });
+  assert.equal(normalizeRentCastProperty({ id: "missing-location" }), null);
+  assert.equal(normalizeRentCastOwner({ data: { id: "missing-location" } }), null);
 });

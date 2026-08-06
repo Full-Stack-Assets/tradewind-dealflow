@@ -1,21 +1,32 @@
+export type OwnerMailingAddress = {
+  addressLine1: string | null;
+  addressLine2: string | null;
+  city: string | null;
+  state: string | null;
+  zipCode: string | null;
+};
+
 export type AutomatedLeadRecord = {
-  provider: "dealmachine";
+  provider: "rentcast";
   providerPropertyId: string;
   address: string;
   city: string;
   state: string;
   zip: string;
   estimatedValue: number | null;
-  ownerName: string | null;
+  ownerNames: string[];
+  ownerType: string | null;
+  ownerMailingAddress: OwnerMailingAddress | null;
+  ownerOccupied: boolean | null;
 };
 
 export type OwnerEnrichment = {
-  provider: "dealmachine";
-  providerPersonId: string;
-  ownerName: string | null;
-  phones: string[];
-  emails: string[];
-  dnc: boolean | null;
+  provider: "rentcast";
+  providerPropertyId: string;
+  ownerNames: string[];
+  ownerType: string | null;
+  ownerMailingAddress: OwnerMailingAddress | null;
+  ownerOccupied: boolean | null;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -23,6 +34,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function envelopeData(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) return isRecord(value[0]) ? value[0] : null;
   if (!isRecord(value)) return null;
   const data = value.data;
   if (Array.isArray(data)) return isRecord(data[0]) ? data[0] : null;
@@ -35,62 +47,84 @@ function stringValue(value: unknown): string | null {
   return normalized || null;
 }
 
+function upperStringValue(value: unknown): string | null {
+  const normalized = stringValue(value);
+  return normalized?.toUpperCase() ?? null;
+}
+
 function numberValue(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function stringList(value: unknown, keys: string[]): string[] {
+function ownerNames(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value
-    .map((item) => {
-      if (typeof item === "string") return stringValue(item);
-      if (!isRecord(item)) return null;
-      for (const key of keys) {
-        const candidate = stringValue(item[key]);
-        if (candidate) return candidate;
-      }
-      return null;
-    })
-    .filter((item): item is string => item !== null);
+    .map(stringValue)
+    .filter((item): item is string => item !== null)
+    .slice(0, 20);
 }
 
-export function normalizeDealMachineProperty(value: unknown): AutomatedLeadRecord | null {
+function ownerMailingAddress(value: unknown): OwnerMailingAddress | null {
+  if (!isRecord(value)) return null;
+  const addressLine1 = stringValue(value.addressLine1 ?? value.address);
+  const addressLine2 = stringValue(value.addressLine2);
+  const city = stringValue(value.city);
+  const state = upperStringValue(value.state);
+  const zipCode = stringValue(value.zipCode ?? value.zip);
+  if (!addressLine1 && !city && !state && !zipCode) return null;
+  return { addressLine1, addressLine2, city, state, zipCode };
+}
+
+export function normalizeRentCastProperty(value: unknown): AutomatedLeadRecord | null {
   const property = envelopeData(value);
   if (!property) return null;
-  const providerPropertyId = stringValue(property.dm_property_id);
-  const address = stringValue(property.address);
+  const providerPropertyId = stringValue(property.id);
+  const address = stringValue(property.addressLine1 ?? property.formattedAddress);
   const city = stringValue(property.city);
-  const state = stringValue(property.state)?.toUpperCase();
-  const zip = stringValue(property.zip ?? property.code);
+  const state = upperStringValue(property.state);
+  const zip = stringValue(property.zipCode ?? property.zip);
   if (!providerPropertyId || !address || !city || !state || !zip) return null;
+
+  const owner = isRecord(property.owner) ? property.owner : null;
+  const names = ownerNames(owner?.names);
+  const ownerType = stringValue(owner?.type);
+  const mailingAddress = ownerMailingAddress(owner?.mailingAddress);
+  const ownerOccupied = typeof property.ownerOccupied === "boolean" ? property.ownerOccupied : null;
   return {
-    provider: "dealmachine",
+    provider: "rentcast",
     providerPropertyId,
     address,
     city,
     state,
     zip,
-    estimatedValue: numberValue(property.estimated_value),
-    ownerName: stringValue(property.owner_name),
+    estimatedValue: numberValue(property.estimatedValue),
+    ownerNames: names,
+    ownerType,
+    ownerMailingAddress: mailingAddress,
+    ownerOccupied,
   };
 }
 
-export function normalizeDealMachinePerson(value: unknown): OwnerEnrichment | null {
-  const person = envelopeData(value);
-  if (!person) return null;
-  const providerPersonId = stringValue(person.dm_person_id);
-  if (!providerPersonId) return null;
-  const phones = stringList(person.phones, ["number", "phone"]);
-  const emails = stringList(person.emails, ["address", "email"]);
-  const dnc = typeof person.dnc === "boolean" ? person.dnc : null;
-  const ownerName = stringValue(person.full_name ?? person.owner_name ?? person.name);
-  if (!ownerName && phones.length === 0 && emails.length === 0) return null;
+export function normalizeRentCastProperties(value: unknown): AutomatedLeadRecord[] {
+  const records = Array.isArray(value)
+    ? value
+    : isRecord(value) && Array.isArray(value.data)
+      ? value.data
+      : [];
+  return records
+    .map(normalizeRentCastProperty)
+    .filter((record): record is AutomatedLeadRecord => record !== null);
+}
+
+export function normalizeRentCastOwner(value: unknown): OwnerEnrichment | null {
+  const property = normalizeRentCastProperty(value);
+  if (!property) return null;
   return {
-    provider: "dealmachine",
-    providerPersonId,
-    ownerName,
-    phones,
-    emails,
-    dnc,
+    provider: "rentcast",
+    providerPropertyId: property.providerPropertyId,
+    ownerNames: property.ownerNames,
+    ownerType: property.ownerType,
+    ownerMailingAddress: property.ownerMailingAddress,
+    ownerOccupied: property.ownerOccupied,
   };
 }

@@ -3,6 +3,7 @@ export interface ProviderEnvironment {
   ELEVENLABS_AGENT_ID?: string;
   ELEVENLABS_PHONE_ID?: string;
   ELEVENLABS_WEBHOOK_SECRET?: string;
+  RENTCAST_API_KEY?: string;
   SKIP_TRACING_API_KEY?: string;
   SKIP_TRACING_API_URL?: string;
 }
