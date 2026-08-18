@@ -1,9 +1,13 @@
 "use client";
 
-import { FormEvent, useCallback, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { useLocalData } from "@/components/LocalDataProvider";
 import { GenerateWithAIButton } from "@/components/ai/GenerateWithAIButton";
+import { listDurableOpportunities, persistOpportunityWorkspace } from "@/lib/opportunity-client";
+import { mergeDealIntoWorkspace, workspaceSliceForDeal } from "@/lib/opportunity-merge";
+import type { DealFlowData } from "@/lib/types";
 import {
   EmptyState,
   LocalDataNotice,
@@ -256,6 +260,8 @@ function asList(raw: string): string[] {
 
 export function SellerPropertyWorkspace() {
   const { data, updateData, writesSupported } = useLocalData();
+  const searchParams = useSearchParams();
+  const selectedPropertyId = searchParams.get("propertyId") || searchParams.get("dealId") || "";
   const [message, setMessage] = useState("");
 
   const [conversationForm, setConversationForm] = useState(emptyConversation);
@@ -265,6 +271,61 @@ export function SellerPropertyWorkspace() {
   const [documentForm, setDocumentForm] = useState(emptyDocument);
   const [reviewDraftForm, setReviewDraftForm] = useState(emptyReviewDraft);
   const [approvalRequestForm, setApprovalRequestForm] = useState(emptyApprovalRequest);
+
+  useEffect(() => {
+    if (!selectedPropertyId) return;
+    setConversationForm((current) => ({ ...current, propertyRecordId: selectedPropertyId }));
+    setTaskForm((current) => ({ ...current, propertyRecordId: selectedPropertyId }));
+    setComparableForm((current) => ({ ...current, propertyRecordId: selectedPropertyId }));
+    setRepairForm((current) => ({ ...current, propertyRecordId: selectedPropertyId }));
+    setDocumentForm((current) => ({ ...current, propertyRecordId: selectedPropertyId }));
+    setReviewDraftForm((current) => ({ ...current, propertyRecordId: selectedPropertyId }));
+    setApprovalRequestForm((current) => ({ ...current, propertyRecordId: selectedPropertyId }));
+  }, [selectedPropertyId]);
+
+  useEffect(() => {
+    let mounted = true;
+    void listDurableOpportunities()
+      .then(async (opportunities) => {
+        if (!mounted || opportunities.length === 0) return;
+        const missing = opportunities.some(
+          (opportunity) => !data.deals.some((deal) => deal.id === opportunity.deal.id),
+        );
+        if (!missing) return;
+        await updateData((current) => {
+          let next = current;
+          for (const opportunity of opportunities) {
+            next = mergeDealIntoWorkspace(next, opportunity.deal, opportunity.workspace);
+          }
+          return next;
+        });
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [data.deals, updateData]);
+
+  const commitDealChange = useCallback(
+    async (dealId: string, updater: (current: DealFlowData) => DealFlowData) => {
+      const snapshot: { current: DealFlowData | null } = { current: null };
+      const result = await updateData((current) => {
+        snapshot.current = updater(current);
+        return snapshot.current;
+      });
+      if (result.ok && snapshot.current) {
+        const next = snapshot.current;
+        void persistOpportunityWorkspace(
+          dealId,
+          workspaceSliceForDeal(next.sellerPropertyWorkspace, dealId),
+        ).catch(() => {
+          setMessage("Saved locally. Durable D1 persist failed; the next save will retry.");
+        });
+      }
+      return result;
+    },
+    [updateData],
+  );
 
   const dealChoices = useMemo(
     () => data.deals.map((deal) => ({ value: deal.id, label: `${deal.address}, ${deal.city}` })),
@@ -315,7 +376,7 @@ export function SellerPropertyWorkspace() {
       return;
     }
 
-    const result = await updateData((current) => ({
+    const result = await commitDealChange(record.propertyRecordId, (current) => ({
       ...current,
       sellerPropertyWorkspace: {
         ...current.sellerPropertyWorkspace,
@@ -354,7 +415,7 @@ export function SellerPropertyWorkspace() {
       notes: taskForm.notes.trim(),
     };
 
-    const result = await updateData((current) => ({
+    const result = await commitDealChange(record.propertyRecordId, (current) => ({
       ...current,
       sellerPropertyWorkspace: {
         ...current.sellerPropertyWorkspace,
@@ -418,7 +479,7 @@ export function SellerPropertyWorkspace() {
       updatedAt: now,
     };
 
-    const result = await updateData((current) => ({
+    const result = await commitDealChange(record.propertyRecordId, (current) => ({
       ...current,
       sellerPropertyWorkspace: {
         ...current.sellerPropertyWorkspace,
@@ -469,7 +530,7 @@ export function SellerPropertyWorkspace() {
       updatedAt: now,
     };
 
-    const result = await updateData((current) => ({
+    const result = await commitDealChange(record.propertyRecordId, (current) => ({
       ...current,
       sellerPropertyWorkspace: {
         ...current.sellerPropertyWorkspace,
@@ -519,7 +580,7 @@ export function SellerPropertyWorkspace() {
       updatedAt: now,
     };
 
-    const result = await updateData((current) => ({
+    const result = await commitDealChange(record.propertyRecordId, (current) => ({
       ...current,
       sellerPropertyWorkspace: {
         ...current.sellerPropertyWorkspace,
@@ -555,7 +616,7 @@ export function SellerPropertyWorkspace() {
       updatedAt: now,
     };
 
-    const result = await updateData((current) => ({
+    const result = await commitDealChange(record.propertyRecordId, (current) => ({
       ...current,
       sellerPropertyWorkspace: {
         ...current.sellerPropertyWorkspace,
@@ -590,7 +651,7 @@ export function SellerPropertyWorkspace() {
       reason: approvalRequestForm.reason.trim(),
     };
 
-    const result = await updateData((current) => ({
+    const result = await commitDealChange(record.propertyRecordId, (current) => ({
       ...current,
       sellerPropertyWorkspace: {
         ...current.sellerPropertyWorkspace,
@@ -681,9 +742,9 @@ export function SellerPropertyWorkspace() {
       {showNoProperties ? (
         <section className="panel" aria-label="No properties">
           <EmptyState title="A property record is required">
-            Add a property in Pipeline first. Seller workspace inputs are scoped
-            to a selected property record and remain local drafts until manual
-            review.
+            Promote a reviewed lead from Pipeline first. Seller workspace inputs
+            are scoped to a selected property record and remain drafts until
+            manual review.
           </EmptyState>
         </section>
       ) : (

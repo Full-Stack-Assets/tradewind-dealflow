@@ -32,6 +32,10 @@ yarn-error.log*
 .env*
 !.env.example
 
+# Private diligence and commercial packets (PII, executed agreements, partner metrics)
+/docs/diligence/private/
+/docs/commercial/private/
+
 # vercel
 .vercel
 

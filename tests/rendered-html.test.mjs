@@ -141,6 +141,7 @@ test("pipeline renders the automated lead engine and hard action boundaries", as
 
   assert.match(html, /Automated lead intake/i);
   assert.match(html, /D1 records|MassGIS records in D1/i);
+  assert.match(html, /Promote to Deal Work/i);
   assert.match(html, /No CSV upload/i);
   assert.match(html, /No automated leads yet|Loading automated leads/i);
   assert.doesNotMatch(

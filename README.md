@@ -21,6 +21,8 @@ An operator can:
   export;
 - read automated MassGIS leads from organization-scoped D1 without a browser
   import or repeated property typing;
+- promote an automated lead into Deal Work without retyping, persisting the
+  opportunity in organization-scoped D1 as well as the local workspace;
 - optionally enrich approved parcel records with server-only RentCast owner
   names and mailing addresses;
 - inspect each property’s source record, usage rights, confidence, freshness,
@@ -90,7 +92,7 @@ commit promotion, and private production health verification are tracked in
 | Route | Current purpose |
 | --- | --- |
 | `/dashboard` | Current buy-box, qualification, research, block, and storage snapshot |
-| `/pipeline` | Automated D1 leads, owner-enrichment status, and review queue |
+| `/pipeline` | Automated D1 leads, owner-enrichment status, and Promote to Deal Work |
 | `/sources` | MassGIS policy approval, scheduled runs, exceptions, and audit |
 | `/approvals` | Hash-bound human approval requests and decisions |
 | `/compliance` | Educational state lanes and planning-only controls |
@@ -123,6 +125,7 @@ educational Deal Lab, formal offer preparation, or any transaction action.
 6. [Compliance-review checklist](docs/COMPLIANCE_REVIEW_CHECKLIST.md)
 7. [Backup and recovery](docs/BACKUP_AND_RECOVERY.md)
 8. [Known limitations and deferred backlog](docs/KNOWN_LIMITATIONS.md)
+9. [Acquisition readiness (internal)](docs/superpowers/plans/2026-08-18-acquisition-readiness.md)
 
 Existing architecture and security documents are historical references. The
 eight launch documents named in the Task 7 brief, including this README, are

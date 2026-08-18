@@ -2,9 +2,9 @@ name: Docker Image CI
 
 on:
   push:
-    branches: [ "codex/authorized-lead-intake" ]
+    branches: [ "main" ]
   pull_request:
-    branches: [ "codex/authorized-lead-intake" ]
+    branches: [ "main" ]
 
 jobs:
 

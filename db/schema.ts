@@ -129,3 +129,18 @@ export const leadEnrichmentAttempts = sqliteTable("lead_enrichment_attempts", {
   uniqueIndex("lead_enrichment_attempts_idempotency_unique").on(table.organizationId, table.leadId, table.provider, table.requestHash),
   index("lead_enrichment_attempts_retry_idx").on(table.organizationId, table.status, table.nextAttemptAt),
 ]);
+
+export const promotedOpportunities = sqliteTable("promoted_opportunities", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id").notNull(),
+  sourceLeadId: text("source_lead_id"),
+  dealId: text("deal_id").notNull(),
+  dealJson: text("deal_json").notNull(),
+  workspaceJson: text("workspace_json").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("promoted_opportunities_org_lead_unique").on(table.organizationId, table.sourceLeadId),
+  uniqueIndex("promoted_opportunities_org_deal_unique").on(table.organizationId, table.dealId),
+  index("promoted_opportunities_org_updated_idx").on(table.organizationId, table.updatedAt),
+]);
