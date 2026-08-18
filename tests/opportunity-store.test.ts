@@ -20,7 +20,7 @@ function request(path: string, init: RequestInit = {}, headers: Record<string, s
 }
 
 async function seedLead(db: Awaited<ReturnType<typeof createTestD1>>, organizationId = "org-a") {
-  return upsertAutomatedLead(db, {
+  const result = await upsertAutomatedLead(db, {
     provider: "massgis",
     providerPropertyId: "95-101",
     address: "10 Harbor Way",
@@ -38,6 +38,7 @@ async function seedLead(db: Awaited<ReturnType<typeof createTestD1>>, organizati
     sourceFingerprint: "hash-1",
     sourceRetrievedAt: "2026-08-06T12:00:00.000Z",
   });
+  return result.lead;
 }
 
 test("opportunity store upserts by lead id and persists workspace JSON", async (t) => {

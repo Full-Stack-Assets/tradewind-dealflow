@@ -48,17 +48,23 @@ export function mergeDealIntoWorkspace(
   const deals = hasDeal
     ? data.deals.map((item) => (item.id === deal.id ? deal : item))
     : [...data.deals, deal];
-  const nextWorkspace = { ...data.sellerPropertyWorkspace };
-  for (const key of WORKSPACE_KEYS) {
-    const existingIds = new Set(nextWorkspace[key].map((item) => item.id));
-    nextWorkspace[key] = [
-      ...nextWorkspace[key],
-      ...workspace[key].filter((item) => !existingIds.has(item.id)),
-    ];
-  }
+  const nextWorkspace: SellerPropertyWorkspace = {
+    conversationLogs: mergeById(data.sellerPropertyWorkspace.conversationLogs, workspace.conversationLogs),
+    tasks: mergeById(data.sellerPropertyWorkspace.tasks, workspace.tasks),
+    comparableRanges: mergeById(data.sellerPropertyWorkspace.comparableRanges, workspace.comparableRanges),
+    repairRanges: mergeById(data.sellerPropertyWorkspace.repairRanges, workspace.repairRanges),
+    documents: mergeById(data.sellerPropertyWorkspace.documents, workspace.documents),
+    reviewDrafts: mergeById(data.sellerPropertyWorkspace.reviewDrafts, workspace.reviewDrafts),
+    approvalRequests: mergeById(data.sellerPropertyWorkspace.approvalRequests, workspace.approvalRequests),
+  };
   return {
     ...data,
     deals,
     sellerPropertyWorkspace: nextWorkspace,
   };
+}
+
+function mergeById<T extends { id: string }>(existing: T[], incoming: T[]): T[] {
+  const existingIds = new Set(existing.map((item) => item.id));
+  return [...existing, ...incoming.filter((item) => !existingIds.has(item.id))];
 }
