@@ -50,6 +50,7 @@ test("migrations create the MassGIS and control-plane tables", async (t) => {
     "ingestion_runs",
     "lead_enrichment_attempts",
     "lead_owner_profiles",
+    "promoted_opportunities",
     "source_policies",
     "source_records",
   ]);

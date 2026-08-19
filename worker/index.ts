@@ -6,6 +6,7 @@ import { handleControlPlaneApi } from "../server/control-plane-api.ts";
 import { handleAiFieldGeneration } from "../server/ai-field-generation.ts";
 import { handleElevenLabsWebhook } from "../server/webhooks/elevenlabs.ts";
 import { handleAutomatedLeadApi } from "../server/automated-lead-api.ts";
+import { handleOpportunityApi } from "../server/opportunity-api.ts";
 import { runDueAutomatedLeadCycles } from "../server/automated-lead-runner.ts";
 import { createRentCastProvider } from "../server/providers/rentcast.ts";
 import { isRentCastActivated } from "../server/providers/provider-config.ts";
@@ -52,6 +53,8 @@ const worker = {
     if (controlPlaneResponse) return controlPlaneResponse;
     const leadResponse = await handleAutomatedLeadApi(request, env);
     if (leadResponse) return leadResponse;
+    const opportunityResponse = await handleOpportunityApi(request, env);
+    if (opportunityResponse) return opportunityResponse;
     if (url.pathname === "/api/ai/field-generation") {
       return handleAiFieldGeneration(request, env);
     }

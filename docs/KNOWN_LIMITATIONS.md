@@ -31,6 +31,9 @@
   data, contact enrichment, and arbitrary vendor schemas are not connected.
 - Scheduled runs stage owner-free records only; they do not mutate the local
   Pipeline while the browser is closed.
+- Promoting a D1 lead into Deal Work now creates a local `DealRecord` and a
+  durable D1 opportunity. Seller-workspace drafts still also cache in the
+  browser; second-device recovery depends on the authenticated opportunity API.
 
 ### Qualification and reporting
 
@@ -100,11 +103,16 @@
   Task 8 dependency gate and is not silently represented as resolved.
 - No DNS or public-access change is part of this source increment.
 
+Acquisition sequencing, buyer map, and diligence gates live in
+[Acquisition readiness](superpowers/plans/2026-08-18-acquisition-readiness.md).
+Do not approach corporate development until those gates pass.
+
 ## Deferred backlog in revenue order
 
-1. **Seller/property workspace and simplified underwriting** — manual
-   conversation log, property facts, documents, tasks, manual comparable and
-   repair ranges, and preliminary evidence-ranged outputs.
+1. **Seller/property workspace and simplified underwriting** — v1 conversation
+   log, tasks, comparable and repair ranges, and local approvals exist. Wire
+   those ranges into the reference underwriting engine and keep documents
+   metadata-only until object storage exists.
 2. **Minimal buyer engine** — real buyer entry/CSV, verification date and
    proof-of-funds status, narrow buy boxes, seven-factor matching, reasons, and
    conflicts.

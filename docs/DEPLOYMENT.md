@@ -18,7 +18,8 @@ npm run dev
 No MassGIS credential is required. The deployment must provide logical D1
 binding `DB`, apply `drizzle/0000_massgis_ingestion.sql`,
 `drizzle/0001_harden_ingestion_runs.sql`, and
-`drizzle/0002_control_plane.sql`, and `drizzle/0003_automated_leads.sql`, and
+`drizzle/0002_control_plane.sql`, `drizzle/0003_automated_leads.sql`, and
+`drizzle/0004_promoted_opportunities.sql`, and
 register hourly cron `0 * * * *`. Do
 not add secrets, private email addresses, seller records, buyer records, or
 production exports to source control.

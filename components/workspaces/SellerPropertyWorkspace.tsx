@@ -1,9 +1,13 @@
 "use client";
 
-import { FormEvent, useCallback, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { useLocalData } from "@/components/LocalDataProvider";
 import { GenerateWithAIButton } from "@/components/ai/GenerateWithAIButton";
+import { listDurableOpportunities, persistOpportunityWorkspace } from "@/lib/opportunity-client";
+import { mergeDealIntoWorkspace, workspaceSliceForDeal } from "@/lib/opportunity-merge";
+import type { DealFlowData } from "@/lib/types";
 import {
   EmptyState,
   LocalDataNotice,
@@ -256,6 +260,9 @@ function asList(raw: string): string[] {
 
 export function SellerPropertyWorkspace() {
   const { data, updateData, writesSupported } = useLocalData();
+  const searchParams = useSearchParams();
+  const selectedPropertyId = searchParams.get("propertyId") || searchParams.get("dealId") || "";
+  const resolvedPropertyId = (formId: string) => formId || selectedPropertyId;
   const [message, setMessage] = useState("");
 
   const [conversationForm, setConversationForm] = useState(emptyConversation);
@@ -266,6 +273,50 @@ export function SellerPropertyWorkspace() {
   const [reviewDraftForm, setReviewDraftForm] = useState(emptyReviewDraft);
   const [approvalRequestForm, setApprovalRequestForm] = useState(emptyApprovalRequest);
 
+  useEffect(() => {
+    let mounted = true;
+    void listDurableOpportunities()
+      .then(async (opportunities) => {
+        if (!mounted || opportunities.length === 0) return;
+        const missing = opportunities.some(
+          (opportunity) => !data.deals.some((deal) => deal.id === opportunity.deal.id),
+        );
+        if (!missing) return;
+        await updateData((current) => {
+          let next = current;
+          for (const opportunity of opportunities) {
+            next = mergeDealIntoWorkspace(next, opportunity.deal, opportunity.workspace);
+          }
+          return next;
+        });
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [data.deals, updateData]);
+
+  const commitDealChange = useCallback(
+    async (dealId: string, updater: (current: DealFlowData) => DealFlowData) => {
+      const snapshot: { current: DealFlowData | null } = { current: null };
+      const result = await updateData((current) => {
+        snapshot.current = updater(current);
+        return snapshot.current;
+      });
+      if (result.ok && snapshot.current) {
+        const next = snapshot.current;
+        void persistOpportunityWorkspace(
+          dealId,
+          workspaceSliceForDeal(next.sellerPropertyWorkspace, dealId),
+        ).catch(() => {
+          setMessage("Saved locally. Durable D1 persist failed; the next save will retry.");
+        });
+      }
+      return result;
+    },
+    [updateData],
+  );
+
   const dealChoices = useMemo(
     () => data.deals.map((deal) => ({ value: deal.id, label: `${deal.address}, ${deal.city}` })),
     [data.deals],
@@ -275,14 +326,13 @@ export function SellerPropertyWorkspace() {
 
   const showNoProperties = data.deals.length === 0;
 
-  const selectedDrafts = useMemo(
-    () => workspace.reviewDrafts.filter((draft) => draft.propertyRecordId === reviewDraftForm.propertyRecordId),
-    [workspace.reviewDrafts, reviewDraftForm.propertyRecordId],
+  const selectedDrafts = workspace.reviewDrafts.filter(
+    (draft) => draft.propertyRecordId === resolvedPropertyId(reviewDraftForm.propertyRecordId),
   );
 
   const addConversation = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (showNoProperties || !conversationForm.propertyRecordId) {
+    if (showNoProperties || !resolvedPropertyId(conversationForm.propertyRecordId)) {
       setMessage("Select a property before logging a seller conversation.");
       return;
     }
@@ -293,7 +343,7 @@ export function SellerPropertyWorkspace() {
     }
     const record: SellerConversationLog = {
       id: nextId(),
-      propertyRecordId: conversationForm.propertyRecordId,
+      propertyRecordId: resolvedPropertyId(conversationForm.propertyRecordId),
       loggedAt: new Date().toISOString(),
       actor: conversationForm.actor,
       channel: conversationForm.channel,
@@ -315,7 +365,7 @@ export function SellerPropertyWorkspace() {
       return;
     }
 
-    const result = await updateData((current) => ({
+    const result = await commitDealChange(record.propertyRecordId, (current) => ({
       ...current,
       sellerPropertyWorkspace: {
         ...current.sellerPropertyWorkspace,
@@ -324,7 +374,7 @@ export function SellerPropertyWorkspace() {
     }));
     if (result.ok) {
       setMessage("Conversation log saved locally. No action was sent.");
-      setConversationForm({ ...emptyConversation, propertyRecordId: conversationForm.propertyRecordId });
+      setConversationForm({ ...emptyConversation, propertyRecordId: resolvedPropertyId(conversationForm.propertyRecordId) });
     } else {
       setMessage(result.message);
     }
@@ -332,7 +382,7 @@ export function SellerPropertyWorkspace() {
 
   const addTask = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (showNoProperties || !taskForm.propertyRecordId || !taskForm.title.trim() || !taskForm.dueAt) {
+    if (showNoProperties || !resolvedPropertyId(taskForm.propertyRecordId) || !taskForm.title.trim() || !taskForm.dueAt) {
       setMessage("Select a property and complete title and due date for this task.");
       return;
     }
@@ -345,7 +395,7 @@ export function SellerPropertyWorkspace() {
     const now = new Date().toISOString();
     const record: SellerWorkspaceTask = {
       id: nextId(),
-      propertyRecordId: taskForm.propertyRecordId,
+      propertyRecordId: resolvedPropertyId(taskForm.propertyRecordId),
       createdAt: now,
       updatedAt: now,
       title: taskForm.title.trim(),
@@ -354,7 +404,7 @@ export function SellerPropertyWorkspace() {
       notes: taskForm.notes.trim(),
     };
 
-    const result = await updateData((current) => ({
+    const result = await commitDealChange(record.propertyRecordId, (current) => ({
       ...current,
       sellerPropertyWorkspace: {
         ...current.sellerPropertyWorkspace,
@@ -373,7 +423,7 @@ export function SellerPropertyWorkspace() {
     event.preventDefault();
     if (
       showNoProperties
-      || !comparableForm.propertyRecordId
+      || !resolvedPropertyId(comparableForm.propertyRecordId)
       || !comparableForm.comparableAddress.trim()
       || !comparableForm.soldDate
       || !comparableForm.adjustmentNotes.trim()
@@ -400,7 +450,7 @@ export function SellerPropertyWorkspace() {
 
     const record: SellerComparableRange = {
       id: nextId(),
-      propertyRecordId: comparableForm.propertyRecordId,
+      propertyRecordId: resolvedPropertyId(comparableForm.propertyRecordId),
       comparableAddress: comparableForm.comparableAddress.trim(),
       soldPrice: normalizeNumber(comparableForm.soldPrice),
       soldDate: normalizedSoldDate,
@@ -418,7 +468,7 @@ export function SellerPropertyWorkspace() {
       updatedAt: now,
     };
 
-    const result = await updateData((current) => ({
+    const result = await commitDealChange(record.propertyRecordId, (current) => ({
       ...current,
       sellerPropertyWorkspace: {
         ...current.sellerPropertyWorkspace,
@@ -435,7 +485,7 @@ export function SellerPropertyWorkspace() {
 
   const addRepairRange = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!repairForm.propertyRecordId || !repairForm.workItem.trim() || !repairForm.evidenceSummary.trim()) {
+    if (!resolvedPropertyId(repairForm.propertyRecordId) || !repairForm.workItem.trim() || !repairForm.evidenceSummary.trim()) {
       setMessage("Choose a property and complete repair range fields.");
       return;
     }
@@ -453,7 +503,7 @@ export function SellerPropertyWorkspace() {
 
     const record: SellerRepairRange = {
       id: nextId(),
-      propertyRecordId: repairForm.propertyRecordId,
+      propertyRecordId: resolvedPropertyId(repairForm.propertyRecordId),
       workItem: repairForm.workItem.trim(),
       lowEstimate: low,
       highEstimate: high,
@@ -469,7 +519,7 @@ export function SellerPropertyWorkspace() {
       updatedAt: now,
     };
 
-    const result = await updateData((current) => ({
+    const result = await commitDealChange(record.propertyRecordId, (current) => ({
       ...current,
       sellerPropertyWorkspace: {
         ...current.sellerPropertyWorkspace,
@@ -486,7 +536,7 @@ export function SellerPropertyWorkspace() {
 
   const addDocument = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!documentForm.propertyRecordId || !documentForm.title.trim() || !documentForm.fileName.trim()) {
+    if (!resolvedPropertyId(documentForm.propertyRecordId) || !documentForm.title.trim() || !documentForm.fileName.trim()) {
       setMessage("Choose property and provide document title and file name.");
       return;
     }
@@ -498,7 +548,7 @@ export function SellerPropertyWorkspace() {
     const now = new Date().toISOString();
     const record: SellerDocumentContract = {
       id: nextId(),
-      propertyRecordId: documentForm.propertyRecordId,
+      propertyRecordId: resolvedPropertyId(documentForm.propertyRecordId),
       title: documentForm.title.trim(),
       category: documentForm.category,
       storageMode: "metadata-only",
@@ -519,7 +569,7 @@ export function SellerPropertyWorkspace() {
       updatedAt: now,
     };
 
-    const result = await updateData((current) => ({
+    const result = await commitDealChange(record.propertyRecordId, (current) => ({
       ...current,
       sellerPropertyWorkspace: {
         ...current.sellerPropertyWorkspace,
@@ -536,7 +586,7 @@ export function SellerPropertyWorkspace() {
 
   const addReviewDraft = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!reviewDraftForm.propertyRecordId || !reviewDraftForm.title.trim() || !reviewDraftForm.summary.trim()) {
+    if (!resolvedPropertyId(reviewDraftForm.propertyRecordId) || !reviewDraftForm.title.trim() || !reviewDraftForm.summary.trim()) {
       setMessage("Select property and fill review draft title and summary.");
       return;
     }
@@ -544,7 +594,7 @@ export function SellerPropertyWorkspace() {
     const now = new Date().toISOString();
     const record: SellerReviewDraft = {
       id: nextId(),
-      propertyRecordId: reviewDraftForm.propertyRecordId,
+      propertyRecordId: resolvedPropertyId(reviewDraftForm.propertyRecordId),
       title: reviewDraftForm.title.trim(),
       summary: reviewDraftForm.summary.trim(),
       includeComparableRangeIds: asList(reviewDraftForm.includeComparableRangeIds),
@@ -555,7 +605,7 @@ export function SellerPropertyWorkspace() {
       updatedAt: now,
     };
 
-    const result = await updateData((current) => ({
+    const result = await commitDealChange(record.propertyRecordId, (current) => ({
       ...current,
       sellerPropertyWorkspace: {
         ...current.sellerPropertyWorkspace,
@@ -572,14 +622,14 @@ export function SellerPropertyWorkspace() {
 
   const addApprovalRequest = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!approvalRequestForm.propertyRecordId || !approvalRequestForm.reviewDraftId || !approvalRequestForm.requestedBy.trim()) {
+    if (!resolvedPropertyId(approvalRequestForm.propertyRecordId) || !approvalRequestForm.reviewDraftId || !approvalRequestForm.requestedBy.trim()) {
       setMessage("Complete approval request property, draft, and requester.");
       return;
     }
     const now = new Date().toISOString();
     const record: SellerApprovalRequest = {
       id: nextId(),
-      propertyRecordId: approvalRequestForm.propertyRecordId,
+      propertyRecordId: resolvedPropertyId(approvalRequestForm.propertyRecordId),
       reviewDraftId: approvalRequestForm.reviewDraftId,
       requestType: approvalRequestForm.requestType,
       requestedAt: now,
@@ -590,7 +640,7 @@ export function SellerPropertyWorkspace() {
       reason: approvalRequestForm.reason.trim(),
     };
 
-    const result = await updateData((current) => ({
+    const result = await commitDealChange(record.propertyRecordId, (current) => ({
       ...current,
       sellerPropertyWorkspace: {
         ...current.sellerPropertyWorkspace,
@@ -601,7 +651,7 @@ export function SellerPropertyWorkspace() {
       setMessage("Approval request saved for manual review.");
       setApprovalRequestForm({
         ...emptyApprovalRequest,
-        propertyRecordId: approvalRequestForm.propertyRecordId,
+        propertyRecordId: resolvedPropertyId(approvalRequestForm.propertyRecordId),
         status: approvalRequestForm.status,
       });
     } else {
@@ -681,9 +731,9 @@ export function SellerPropertyWorkspace() {
       {showNoProperties ? (
         <section className="panel" aria-label="No properties">
           <EmptyState title="A property record is required">
-            Add a property in Pipeline first. Seller workspace inputs are scoped
-            to a selected property record and remain local drafts until manual
-            review.
+            Promote a reviewed lead from Pipeline first. Seller workspace inputs
+            are scoped to a selected property record and remain drafts until
+            manual review.
           </EmptyState>
         </section>
       ) : (
@@ -703,7 +753,7 @@ export function SellerPropertyWorkspace() {
                   <select
                     required
                     disabled={!writesSupported}
-                    value={conversationForm.propertyRecordId}
+                    value={resolvedPropertyId(conversationForm.propertyRecordId)}
                     onChange={(event) => updateConversationField("propertyRecordId", event.target.value)}
                   >
                     <option value="">Select property</option>
@@ -814,7 +864,7 @@ export function SellerPropertyWorkspace() {
                   <select
                     required
                     disabled={!writesSupported}
-                    value={taskForm.propertyRecordId}
+                    value={resolvedPropertyId(taskForm.propertyRecordId)}
                     onChange={(event) => updateTaskField("propertyRecordId", event.target.value)}
                   >
                     <option value="">Select property</option>
@@ -883,7 +933,7 @@ export function SellerPropertyWorkspace() {
                   <select
                     required
                     disabled={!writesSupported}
-                    value={comparableForm.propertyRecordId}
+                    value={resolvedPropertyId(comparableForm.propertyRecordId)}
                     onChange={(event) => updateComparableField("propertyRecordId", event.target.value)}
                   >
                     <option value="">Select property</option>
@@ -968,7 +1018,7 @@ export function SellerPropertyWorkspace() {
                 <select
                   required
                   disabled={!writesSupported}
-                  value={repairForm.propertyRecordId}
+                  value={resolvedPropertyId(repairForm.propertyRecordId)}
                   onChange={(event) => updateRepairField("propertyRecordId", event.target.value)}
                 >
                   <option value="">Select property</option>
@@ -1034,7 +1084,7 @@ export function SellerPropertyWorkspace() {
                   <select
                     required
                     disabled={!writesSupported}
-                    value={documentForm.propertyRecordId}
+                    value={resolvedPropertyId(documentForm.propertyRecordId)}
                     onChange={(event) => updateDocumentField("propertyRecordId", event.target.value)}
                   >
                     <option value="">Select property</option>
@@ -1129,7 +1179,7 @@ export function SellerPropertyWorkspace() {
                 <select
                   required
                   disabled={!writesSupported}
-                  value={reviewDraftForm.propertyRecordId}
+                  value={resolvedPropertyId(reviewDraftForm.propertyRecordId)}
                   onChange={(event) => updateReviewDraftField("propertyRecordId", event.target.value)}
                 >
                   <option value="">Select property</option>
@@ -1202,7 +1252,7 @@ export function SellerPropertyWorkspace() {
                   <select
                     required
                     disabled={!writesSupported}
-                    value={approvalRequestForm.propertyRecordId}
+                    value={resolvedPropertyId(approvalRequestForm.propertyRecordId)}
                     onChange={(event) => updateApprovalRequestField("propertyRecordId", event.target.value)}
                   >
                     <option value="">Select property</option>
